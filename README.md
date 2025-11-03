@@ -1,93 +1,345 @@
-# conterminator
+# Conterminator
 
+A comprehensive Nextflow pipeline for RNA-seq quality control and contamination detection.
 
+## Overview
 
-## Getting started
+**Conterminator** is a production-ready bioinformatics pipeline designed to perform comprehensive quality control and contamination detection on RNA-seq data. The pipeline combines multiple tools to identify potential contamination sources in sequencing data, including cross-strain contamination, bacterial/fungal/viral contamination, and technical artifacts.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### Key Features
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- **Strain-specific alignment** with STAR using custom pseudogenomes or reference genome
+- **Multi-database contamination screening** via BLAST
+- **Microbial contamination detection** using DecontaMiner
+- **Comprehensive QC suite**: FastQC, FastQ Screen, Qualimap, DeepTools, Picard, BEDTools
+- **Flexible subsampling** for performance optimization
+- **Interactive visualizations** and MultiQC reporting
+- **Sample sheet support** for batch processing with per-sample strain assignment
+- **Highly configurable** with sensible defaults
 
-## Add your files
+## Table of Contents
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Input Format](#input-format)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Output Structure](#output-structure)
+- [Troubleshooting](#troubleshooting)
+- [To do](#todo)
+- [Contact](#contact)
 
-```
-cd existing_repo
-git remote add origin https://gitlab.epfl.ch/abadreddine/conterminator.git
-git branch -M main
-git push -uf origin main
-```
+## Requirements
 
-## Integrate with your tools
+### Software Dependencies
 
-- [ ] [Set up project integrations](https://gitlab.epfl.ch/abadreddine/conterminator/-/settings/integrations)
+- **Nextflow** ≥ 23.04.0
+- **Java** ≥ 11
+- **Python** ≥ 3.7
+- **R** ≥ 4.0
 
-## Collaborate with your team
+### Required Tools
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+The pipeline uses the following bioinformatics tools (paths configurable in `nextflow.config`):
 
-## Test and Deploy
+| Tool | Purpose | Version |
+|------|---------|---------|
+| STAR | RNA-seq alignment | 2.7.11b |
+| Samtools | BAM manipulation | 1.22.1 |
+| FastQC | Quality control | 0.12.1 |
+| FastQ Screen | Contamination screening | 0.16.0 |
+| Qualimap | BAM quality control | 2.3 |
+| Picard | GC bias analysis | 3.4.0 |
+| DeepTools | GC bias computation | 3.5.6 |
+| BEDTools | Coverage analysis | 2.x |
+| BLAST+ | Sequence alignment | 2.17.0+ |
+| DecontaMiner | Microbial detection | 1.4 |
+| Seqtk | FASTQ subsampling | 1.5-r133 |
+| BBMap | Format conversion | 39.37 |
+| MultiQC | Report aggregation | 1.31 |
 
-Use the built-in continuous integration in GitLab.
+### Reference Data
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- Strain-specific pseudogenomes and annotations
+- STAR genome indices (auto-generated if missing)
+- BLAST databases for contamination screening
+- FastQ Screen configuration and indices
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+
+### Clone the Repository
+
+```bash
+git clone https://gitlab.epfl.ch/abadreddine/conterminator.git
+cd conterminator
+```
+
+### Configure Tool Paths
+
+Edit `nextflow.config` to specify paths to installed tools and reference data:
+
+```groovy
+params {
+    // Tool paths
+    star_bin = "/path/to/STAR"
+    samtools_bin = "/path/to/samtools"
+    fastqc_bin = "/path/to/fastqc"
+    // ... (see nextflow.config for all options)
+    
+    // Reference directories
+    strains_base_dir = "/path/to/pseudogenomes"
+    star_index_dir = "/path/to/star/indices"
+    contamination_blast_dbs = "/path/to/blast/databases"
+}
+```
+
+### Test Installation
+
+```bash
+nextflow run main_full.nf --help
+```
+
+## Quick Start
+
+### Minimal Example
+
+```bash
+nextflow run main_full.nf \
+    --sample_sheet samples.tsv \
+    --outdir results
+```
+
+### Complete Example with Options
+
+```bash
+nextflow run main_full.nf \
+    --sample_sheet samples.tsv \
+    --outdir results_full \
+    --subset_for_fastq_qc true \
+    --subset_fastq_qc_reads 100000 \
+    --subset_bam_for_qc true \
+    --bam_qc_subset_mapped 200000 \
+    --max_parallel_samples 4
+```
+
+## Input Format
+
+### Sample Sheet (Required)
+
+Create a tab-separated file (`samples.tsv`) with the following format:
+
+```tsv
+sample	strain	path
+sample1	C57BL_6J	/data/fastq/sample1/
+sample2	DBA_2J	/data/fastq/sample2/
+sample3	C57BL_6J	/data/fastq/sample3/
+```
+
+**Requirements:**
+- Header row is mandatory
+- Three columns: `sample`, `strain`, `path`
+- `sample`: Unique sample identifier
+- `strain`: Reference strain name (must exist in `strains_base_dir`)
+- `path`: Directory containing paired-end FASTQ files
+
+**Supported FASTQ naming patterns:**
+- `*_{1,2}.fq.gz` / `*_{1,2}.fastq.gz`
+- `*_{R1,R2}.fq.gz` / `*_{R1,R2}.fastq.gz`
+- Pattern auto-detection or specify with `--fastq_pattern`
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Basic Commands
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+# Show help
+nextflow run main_full.nf --help
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+# Run with defaults
+nextflow run main_full.nf --sample_sheet samples.tsv
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+# Resume failed run
+nextflow run main_full.nf --sample_sheet samples.tsv -resume
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+# Run with specific profile
+nextflow run main_full.nf --sample_sheet samples.tsv -profile cluster
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### Key Parameters
 
-## License
-For open source projects, say how it is licensed.
+#### Input/Output
+```bash
+--sample_sheet <file>      # Sample sheet with strain assignments (required)
+--outdir <path>            # Output directory (default: results)
+--fastq_pattern <pattern>  # FASTQ file pattern (auto-detected)
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+#### Subsampling (Performance Tuning)
+```bash
+--subset_for_fastq_qc true          # Subsample for FastQ QC (default: true)
+--subset_fastq_qc_reads 100000      # Reads for QC (default: 100k)
+
+--subset_for_star false             # Subsample for STAR (default: false)
+--subset_star_reads 100000          # Reads for STAR if enabled
+
+--subset_bam_for_qc true            # Subsample BAMs for QC (default: true)
+--bam_qc_subset_mapped 200000       # Mapped reads for BAM QC (default: 200k)
+
+--subset_unmapped_for_blast true    # Subsample for BLAST (default: true)
+--unmapped_subset_reads 100000      # Unmapped reads for BLAST (default: 100k)
+```
+
+#### Tool Toggles
+```bash
+--run_star_alignment true     # Run STAR alignment (default: true)
+--run_fastqc true             # Run FastQC (default: true)
+--run_fastq_screen true       # Run FastQ Screen (default: true)
+--run_deeptools true          # Run DeepTools GC bias (default: true)
+--run_picard_gc true          # Run Picard GC bias (default: true)
+--run_bedtools_gc true        # Run BEDTools coverage (default: true)
+--run_qualimap true           # Run Qualimap (default: true)
+--run_mapinsights true        # Run MapInsights (default: true)
+--run_decontaminer true       # Run DecontaMiner (default: true)
+--run_contamination_check true # Run BLAST contamination (default: true)
+--run_multiqc true            # Run MultiQC (default: true)
+```
+
+#### Resources
+```bash
+--max_cpus 16              # Maximum CPUs per process
+--max_mem "32 GB"          # Maximum memory per process
+--max_time "24h"           # Maximum time per process
+--max_parallel_samples 4   # Max samples in parallel
+```
+
+## Configuration
+
+### Qualimap Settings
+
+```bash
+--qualimap_mode "both"                    # "bamqc", "rnaseq", or "both"
+--qualimap_genome "mm10"                  # Reference genome name
+--qualimap_protocol "strand-specific-reverse"
+--qualimap_threads 8
+```
+
+### Contamination Detection
+
+```bash
+--contamination_blast_dbs "/path/to/blast/dbs"  # BLAST database directory
+--contamination_evalue "1e-10"                   # E-value threshold
+--blast_max_parallel 10                          # Max parallel BLAST jobs
+```
+
+### DecontaMiner Settings
+
+```bash
+--decontaminer_config "/path/to/config.txt"
+--decontaminer_organisms "bfv"          # b=bacteria, f=fungi, v=viruses
+--decontaminer_pairing "P"              # P=paired, S=single
+--decontaminer_quality_filter "yes"
+--decontaminer_ribo_filter "yes"
+```
+
+## Output Structure
+
+```
+results/
+├── Input/
+│   ├── reference/              # Prepared references
+│   ├── strain_references/      # Strain-specific files
+│   ├── subsampled_bams/        # Subsampled BAM files
+│   ├── subsampled_fastq/       # Subsampled FASTQ files
+│   └── sample_sheet.tsv        # Copy of input sample sheet
+├── Output/
+│   ├── bedtools_gc/            # GC content coverage
+│   ├── contamination_check/    # BLAST results and plots
+│   ├── decontaminer/           # DecontaMiner reports
+│   ├── deeptools_gc_bias/      # DeepTools GC bias
+│   ├── fastqc/                 # FastQC reports
+│   ├── fastq_screen/           # FastQ Screen results
+│   ├── mapinsights/            # MapInsights reports
+│   ├── multiqc/                # MultiQC aggregate report
+│   ├── picard_gc_bias/         # Picard GC metrics
+│   └── qualimap/               # Qualimap QC
+├── Temporary/
+│   ├── decontaminer/           # Intermediate files
+│   └── star_alignment/         # STAR outputs
+└── pipeline_info.txt           # Run metadata
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue: STAR index not found**
+```bash
+# The pipeline will auto-build missing indices
+# Ensure strains_base_dir contains:
+# strains_base_dir/STRAIN_NAME/*pseudogenome__strain_STRAIN_NAME.fa.gz
+# strains_base_dir/STRAIN_NAME/*pseudogenome__strain_STRAIN_NAME.gtf.gz
+```
+
+**Issue: Out of memory errors**
+```bash
+# Increase memory allocation
+--max_mem "64 GB"
+
+# Enable more aggressive subsampling
+--subset_bam_for_qc true
+--bam_qc_subset_mapped 100000
+```
+
+**Issue: Pipeline hangs during BLAST**
+```bash
+# Reduce parallel BLAST jobs
+--blast_max_parallel 5
+
+# Enable BLAST subsampling
+--subset_unmapped_for_blast true
+--unmapped_subset_reads 50000
+```
+
+### Resume Failed Runs
+
+```bash
+# Nextflow automatically caches completed tasks
+nextflow run main_full.nf --sample_sheet samples.tsv -resume
+```
+
+### Check Pipeline Version
+
+```bash
+nextflow run main_full.nf --version
+```
+
+## Execution Profiles
+
+The pipeline supports multiple execution profiles (configure in `nextflow.config`):
+
+```bash
+# Local execution
+nextflow run main_full.nf -profile local
+
+# With Singularity (not ready yet)
+nextflow run main_full.nf -profile singularity
+```
+
+## To do
+
+- Create the singularity image.
+
+## Contact
+
+**Author:** Alaa Badreddine
+
+**Project Repository:** https://gitlab.epfl.ch/abadreddine/conterminator
+
+For bug reports and feature requests, please open an issue on GitLab.
+
+---
+
+## Version History
+
+- **v1.0** (2025) - Initial release with full QC and contamination detection suite
