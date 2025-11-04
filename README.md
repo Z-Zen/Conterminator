@@ -52,7 +52,7 @@ The pipeline uses the following bioinformatics tools (paths configurable in `nex
 | Qualimap | BAM quality control | 2.3 |
 | Picard | GC bias analysis | 3.4.0 |
 | DeepTools | GC bias computation | 3.5.6 |
-| BEDTools | Coverage analysis | 2.x |
+| BEDTools | Coverage analysis | 2.31.1 |
 | BLAST+ | Sequence alignment | 2.17.0+ |
 | DecontaMiner | Microbial detection | 1.4 |
 | Seqtk | FASTQ subsampling | 1.5-r133 |
