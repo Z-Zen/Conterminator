@@ -4,8 +4,6 @@
 </div>
 
 
-# Conterminator
-
 A comprehensive Nextflow pipeline for RNA-seq quality control and contamination detection.
 
 ## Overview
