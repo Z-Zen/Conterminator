@@ -1,7 +1,8 @@
 
-<p align="center">
-  <img src="conterminator.png" width="400">
-</p>
+<div style="text-align: center;">
+  <img src="conterminator.png">
+</div>
+
 
 # Conterminator
 
