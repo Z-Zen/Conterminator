@@ -1,3 +1,8 @@
+
+<p align="center">
+  <img src="conterminator.png" width="400">
+</p>
+
 # Conterminator
 
 A comprehensive Nextflow pipeline for RNA-seq quality control and contamination detection.
