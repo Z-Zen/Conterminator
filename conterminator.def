@@ -1,0 +1,307 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author Alaa Badreddine
+    Version 1.0
+    Description Conterminator pipeline tools container
+
+%help
+    Conterminator v1.0 - RNA-seq QC and Contamination Detection Pipeline
+    
+    This container includes all required bioinformatics tools:
+    - STAR aligner
+    - samtools, seqtk, bedtools
+    - FastQC, FastQ Screen, MultiQC
+    - Picard, Qualimap, MapInsights
+    - BLAST+ suite
+    - DeepTools, BBMap
+    - Python3 with plotting libraries
+    
+    Usage with Nextflow:
+        nextflow run main.nf -profile singularity
+    
+    Bind mount your data directories:
+        singularity exec \
+            --bind /mnt/sas/Data:/data \
+            --bind /mnt/sas/Tools/blast_databases:/blastdb \
+            conterminator.sif <command>
+
+%environment
+    # Set tool paths
+    export PATH=/opt/tools/bin:$PATH
+    export PATH=/opt/tools/STAR/bin:$PATH
+    export PATH=/opt/tools/FastQC:$PATH
+    export PATH=/opt/tools/bbmap:$PATH
+    export PATH=/opt/tools/seqtk:$PATH
+    export PATH=/opt/tools/blast/bin:$PATH
+    export PYTHONPATH=/opt/python_libs:$PYTHONPATH
+    
+    # BLAST database path (will be bind-mounted)
+    export BLASTDB=/blastdb
+    
+    # Java memory for tools
+    export _JAVA_OPTIONS="-Xmx10g"
+
+%post
+    # =====================
+    # Configure non-interactive installation
+    # =====================
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ=Europe/Zurich
+    
+    # Pre-configure tzdata
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
+    echo $TZ > /etc/timezone
+    
+    # Update and install basic dependencies
+    apt-get update && apt-get install -y \
+        wget \
+        curl \
+        git \
+        build-essential \
+        libz-dev \
+        libbz2-dev \
+        liblzma-dev \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libncurses5-dev \
+        unzip \
+        default-jre \
+        default-jdk \
+        python3 \
+        python3-pip \
+        python3-dev \
+        gawk \
+        bc \
+        perl \
+        cpanminus \
+        fontconfig \
+        libfontconfig1-dev \
+        libfreetype6-dev \
+        libpng-dev \
+        libtiff5-dev \
+        libjpeg-dev \
+        libxml2-dev \
+        libcairo2-dev \
+        software-properties-common \
+        dirmngr \
+        gnupg \
+        apt-transport-https \
+        ca-certificates \
+        && rm -rf /var/lib/apt/lists/*
+    
+    # =====================
+    # Install R 4.5.2 from CRAN
+    # =====================
+    echo "Installing R 4.5.2 from CRAN..."
+    
+    # Add CRAN repository key
+    wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
+    
+    # Add CRAN repository
+    echo "deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/" | tee -a /etc/apt/sources.list.d/cran-r.list
+    
+    # Update and install R
+    apt-get update
+    apt-get install -y --no-install-recommends r-base r-base-dev
+    
+    # Verify R version
+    R --version
+    
+    # Create tools directory
+    mkdir -p /opt/tools/bin
+    cd /opt/tools
+    
+    # =====================
+    # Install samtools (1.22.1)
+    # =====================
+    echo "Installing samtools..."
+    wget https://github.com/samtools/samtools/releases/download/1.22.1/samtools-1.22.1.tar.bz2
+    tar -xjf samtools-1.22.1.tar.bz2
+    cd samtools-1.22.1
+    ./configure --prefix=/opt/tools
+    make -j4
+    make install
+    cd ..
+    rm -rf samtools-1.22.1*
+    
+    # =====================
+    # Install STAR (2.7.11b)
+    # =====================
+    echo "Installing STAR..."
+    cd /opt/tools
+    wget https://github.com/alexdobin/STAR/archive/2.7.11b.tar.gz
+    tar -xzf 2.7.11b.tar.gz
+    mkdir -p STAR/bin
+    cp STAR-2.7.11b/bin/Linux_x86_64_static/STAR STAR/bin/
+    chmod +x STAR/bin/STAR
+    rm -rf STAR-2.7.11b 2.7.11b.tar.gz
+    
+    # =====================
+    # Install seqtk
+    # =====================
+    echo "Installing seqtk..."
+    git clone https://github.com/lh3/seqtk.git
+    cd seqtk
+    make
+    cp seqtk /opt/tools/bin/
+    cd ..
+    rm -rf seqtk
+    
+    # =====================
+    # Install BEDTools (2.31.1)
+    # =====================
+    echo "Installing BEDTools..."
+    wget https://github.com/arq5x/bedtools2/releases/download/v2.31.1/bedtools-2.31.1.tar.gz
+    tar -xzf bedtools-2.31.1.tar.gz
+    cd bedtools2
+    make -j4
+    cp bin/* /opt/tools/bin/
+    cd ..
+    rm -rf bedtools2 bedtools-2.31.1.tar.gz
+    
+    # =====================
+    # Install FastQC (0.12.1)
+    # =====================
+    echo "Installing FastQC..."
+    cd /opt/tools
+    wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.12.1.zip
+    unzip fastqc_v0.12.1.zip
+    # FastQC is already in /opt/tools/FastQC after unzip, no need to move
+    chmod +x /opt/tools/FastQC/fastqc
+    ln -s /opt/tools/FastQC/fastqc /opt/tools/bin/fastqc
+    rm fastqc_v0.12.1.zip
+
+    # =====================
+    # Install FastQ Screen (0.16.0)
+    # =====================
+    echo "Installing FastQ Screen..."
+    cd /opt/tools
+    wget https://github.com/StevenWingett/FastQ-Screen/archive/refs/tags/v0.16.0.tar.gz -O fastq_screen_v0.16.0.tar.gz
+    tar -xzf fastq_screen_v0.16.0.tar.gz
+    # Rename to FastQ_Screen for consistency
+    mv FastQ-Screen-0.16.0 FastQ_Screen
+    chmod +x /opt/tools/FastQ_Screen/fastq_screen
+    ln -s /opt/tools/FastQ_Screen/fastq_screen /opt/tools/bin/fastq_screen
+    rm fastq_screen_v0.16.0.tar.gz
+    
+    # =====================
+    # Install Picard (3.2.0)
+    # =====================
+    echo "Installing Picard..."
+    cd /opt/tools
+    mkdir -p picard
+    wget https://github.com/broadinstitute/picard/releases/download/3.2.0/picard.jar -O picard/picard.jar
+    
+    # =====================
+    # Install BLAST+ (2.17.0)
+    # =====================
+    echo "Installing BLAST+..."
+    cd /opt/tools
+    wget https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-linux.tar.gz
+    tar -xzf ncbi-blast-2.17.0+-x64-linux.tar.gz
+    mv ncbi-blast-2.17.0+ blast
+    rm ncbi-blast-2.17.0+-x64-linux.tar.gz
+    
+    # =====================
+    # Install BBMap (39.10)
+    # =====================
+    echo "Installing BBMap..."
+    cd /opt/tools
+    wget https://sourceforge.net/projects/bbmap/files/BBMap_39.10.tar.gz
+    tar -xzf BBMap_39.10.tar.gz
+    # bbmap directory is created by tar, already in /opt/tools/bbmap
+    chmod +x /opt/tools/bbmap/*.sh
+    rm BBMap_39.10.tar.gz
+    
+    # =====================
+    # Install UCSC tools (faCount, faToTwoBit)
+    # =====================
+    echo "Installing UCSC tools..."
+    wget http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/faCount -O /opt/tools/bin/faCount
+    wget http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/faToTwoBit -O /opt/tools/bin/faToTwoBit
+    chmod +x /opt/tools/bin/faCount /opt/tools/bin/faToTwoBit
+    
+    # =====================
+    # Install Python packages
+    # =====================
+    echo "Installing Python packages..."
+    pip3 install --no-cache-dir \
+        numpy \
+        pandas \
+        matplotlib \
+        seaborn \
+        plotly \
+        biopython \
+        pysam \
+        multiqc \
+        deeptools
+    
+    # =====================
+    # Install R and required packages
+    # =====================
+    echo "Installing R packages..."
+    R -e "install.packages(c('ggplot2', 'dplyr', 'tidyr', 'reshape2', 'RColorBrewer'), repos='https://cloud.r-project.org/')"
+    
+    # =====================
+    # Install Qualimap (2.3)
+    # =====================
+    echo "Installing Qualimap..."
+    cd /opt/tools
+    wget https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip
+    unzip qualimap_v2.3.zip
+    # Rename to qualimap for consistency
+    mv qualimap_v2.3 qualimap
+    chmod +x /opt/tools/qualimap/qualimap
+    ln -s /opt/tools/qualimap/qualimap /opt/tools/bin/qualimap
+    rm qualimap_v2.3.zip
+    
+    # =====================
+    # Install MapInsights (optional - if available)
+    # =====================
+    # Note: MapInsights may need to be compiled from source
+    # Add installation steps if you have the source
+    
+    # =====================
+    # Create wrapper scripts
+    # =====================
+    
+    # Picard wrapper
+    cat > /opt/tools/bin/picard << 'EOF'
+#!/bin/bash
+java -jar /opt/tools/picard/picard.jar "$@"
+EOF
+    chmod +x /opt/tools/bin/picard
+    
+    # =====================
+    # Cleanup
+    # =====================
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    
+    echo "Container build complete!"
+
+%runscript
+    echo "Conterminator v1.0 Container"
+    echo "Available tools:"
+    echo "  - samtools: $(samtools --version | head -1)"
+    echo "  - STAR: $(STAR --version)"
+    echo "  - FastQC: $(fastqc --version)"
+    echo "  - MultiQC: $(multiqc --version)"
+    echo "  - BLAST+: $(blastn -version | head -1)"
+    echo ""
+    echo "Run 'singularity exec conterminator.sif <tool> --help' for tool usage"
+
+%test
+    # Test that key tools are installed and working
+    echo "Testing tool installations..."
+    samtools --version
+    STAR --version
+    fastqc --version
+    bedtools --version
+    blastn -version
+    multiqc --version
+    python3 --version
+    R --version
+    echo "All tests passed!"
