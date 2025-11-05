@@ -3,19 +3,24 @@ From: ubuntu:22.04
 
 %labels
     Author Alaa Badreddine
-    Version 1.0
+    Version 1.1
     Description Conterminator pipeline tools container
 
+%files
+    # Copy modified DecontaMiner scripts from host to container
+    /mnt/sas/Tools/decontaminer-RNAseq /opt/tools/decontaminer
+
 %help
-    Conterminator v1.0 - RNA-seq QC and Contamination Detection Pipeline
-    
+    Conterminator v1.1 - RNA-seq QC and Contamination Detection Pipeline
+
     This container includes all required bioinformatics tools:
-    - STAR aligner
-    - samtools, seqtk, bedtools
-    - FastQC, FastQ Screen, MultiQC
-    - Picard, Qualimap, MapInsights
-    - BLAST+ suite
-    - DeepTools, BBMap
+    - STAR aligner (2.7.11b)
+    - samtools (1.22.1), seqtk, bedtools (2.31.1)
+    - FastQC (0.12.1), FastQ Screen (0.16.0), MultiQC
+    - Picard (3.4.0), Qualimap (2.3), MapInsights
+    - BLAST+ suite (2.17.0+)
+    - DeepTools (3.5.6), BBMap (39.37)
+    - DecontaMiner (1.4, modified for pipeline)
     - Python3 with plotting libraries
     
     Usage with Nextflow:
@@ -35,11 +40,17 @@ From: ubuntu:22.04
     export PATH=/opt/tools/bbmap:$PATH
     export PATH=/opt/tools/seqtk:$PATH
     export PATH=/opt/tools/blast/bin:$PATH
+    export PATH=/opt/tools/decontaminer:$PATH
     export PYTHONPATH=/opt/python_libs:$PYTHONPATH
-    
+
+    # Locale settings to prevent Perl warnings
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+
     # BLAST database path (will be bind-mounted)
     export BLASTDB=/blastdb
-    
+
     # Java memory for tools
     export _JAVA_OPTIONS="-Xmx10g"
 
@@ -67,8 +78,6 @@ From: ubuntu:22.04
         libssl-dev \
         libncurses5-dev \
         unzip \
-        default-jre \
-        default-jdk \
         python3 \
         python3-pip \
         python3-dev \
@@ -84,12 +93,32 @@ From: ubuntu:22.04
         libjpeg-dev \
         libxml2-dev \
         libcairo2-dev \
+        libgd-dev \
+        libgd-perl \
+        locales \
         software-properties-common \
         dirmngr \
         gnupg \
         apt-transport-https \
         ca-certificates \
         && rm -rf /var/lib/apt/lists/*
+
+    # Configure locale to prevent Perl warnings
+    echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8
+
+    # =====================
+    # Install Java 17 (required for Picard 3.4.0)
+    # =====================
+    echo "Installing Java 17..."
+    apt-get update
+    apt-get install -y openjdk-17-jdk openjdk-17-jre
+    # Set Java 17 as default
+    update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+    update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
+    java -version
+    rm -rf /var/lib/apt/lists/*
     
     # =====================
     # Install R 4.5.2 from CRAN
@@ -121,7 +150,7 @@ From: ubuntu:22.04
     tar -xjf samtools-1.22.1.tar.bz2
     cd samtools-1.22.1
     ./configure --prefix=/opt/tools
-    make -j4
+    make -j
     make install
     cd ..
     rm -rf samtools-1.22.1*
@@ -144,7 +173,7 @@ From: ubuntu:22.04
     echo "Installing seqtk..."
     git clone https://github.com/lh3/seqtk.git
     cd seqtk
-    make
+    make -j
     cp seqtk /opt/tools/bin/
     cd ..
     rm -rf seqtk
@@ -156,7 +185,7 @@ From: ubuntu:22.04
     wget https://github.com/arq5x/bedtools2/releases/download/v2.31.1/bedtools-2.31.1.tar.gz
     tar -xzf bedtools-2.31.1.tar.gz
     cd bedtools2
-    make -j4
+    make -j
     cp bin/* /opt/tools/bin/
     cd ..
     rm -rf bedtools2 bedtools-2.31.1.tar.gz
@@ -183,16 +212,28 @@ From: ubuntu:22.04
     # Rename to FastQ_Screen for consistency
     mv FastQ-Screen-0.16.0 FastQ_Screen
     chmod +x /opt/tools/FastQ_Screen/fastq_screen
-    ln -s /opt/tools/FastQ_Screen/fastq_screen /opt/tools/bin/fastq_screen
+
+    # Install required Perl modules for FastQ Screen
+    echo "Installing Perl modules for FastQ Screen..."
+    cpanm --notest GD::Graph::bars || true
+    cpanm --notest GD::Graph::lines || true
+    cpanm --notest GD::Graph::linespoints || true
+
+    # Create wrapper script instead of symlink (Perl script needs proper interpreter)
+    cat > /opt/tools/bin/fastq_screen << 'EOF'
+#!/bin/bash
+perl /opt/tools/FastQ_Screen/fastq_screen "$@"
+EOF
+    chmod +x /opt/tools/bin/fastq_screen
     rm fastq_screen_v0.16.0.tar.gz
-    
+
     # =====================
-    # Install Picard (3.2.0)
+    # Install Picard (3.4.0)
     # =====================
     echo "Installing Picard..."
     cd /opt/tools
     mkdir -p picard
-    wget https://github.com/broadinstitute/picard/releases/download/3.2.0/picard.jar -O picard/picard.jar
+    wget https://github.com/broadinstitute/picard/releases/download/3.4.0/picard.jar -O picard/picard.jar
     
     # =====================
     # Install BLAST+ (2.17.0)
@@ -205,15 +246,15 @@ From: ubuntu:22.04
     rm ncbi-blast-2.17.0+-x64-linux.tar.gz
     
     # =====================
-    # Install BBMap (39.10)
+    # Install BBMap (39.37)
     # =====================
     echo "Installing BBMap..."
     cd /opt/tools
-    wget https://sourceforge.net/projects/bbmap/files/BBMap_39.10.tar.gz
-    tar -xzf BBMap_39.10.tar.gz
+    wget https://sourceforge.net/projects/bbmap/files/BBMap_39.37.tar.gz
+    tar -xzf BBMap_39.37.tar.gz
     # bbmap directory is created by tar, already in /opt/tools/bbmap
     chmod +x /opt/tools/bbmap/*.sh
-    rm BBMap_39.10.tar.gz
+    rm BBMap_39.37.tar.gz
     
     # =====================
     # Install UCSC tools (faCount, faToTwoBit)
@@ -254,15 +295,32 @@ From: ubuntu:22.04
     # Rename to qualimap for consistency
     mv qualimap_v2.3 qualimap
     chmod +x /opt/tools/qualimap/qualimap
+
+    # Fix Qualimap wrapper for Java 17 compatibility
+    # Remove obsolete -XX:MaxPermSize option (removed in Java 8+)
+    sed -i 's/-XX:MaxPermSize=[0-9]*[mMgG]//g' /opt/tools/qualimap/qualimap
+
     ln -s /opt/tools/qualimap/qualimap /opt/tools/bin/qualimap
     rm qualimap_v2.3.zip
     
+    # =====================
+    # Configure DecontaMiner
+    # =====================
+    echo "Setting up DecontaMiner..."
+    # Set execute permissions on DecontaMiner scripts
+    if [ -d "/opt/tools/decontaminer" ]; then
+        chmod +x /opt/tools/decontaminer/*.pl /opt/tools/decontaminer/*.sh 2>/dev/null || true
+        echo "DecontaMiner configured at /opt/tools/decontaminer"
+    else
+        echo "WARNING: DecontaMiner directory not found. Ensure it was copied in %files section."
+    fi
+
     # =====================
     # Install MapInsights (optional - if available)
     # =====================
     # Note: MapInsights may need to be compiled from source
     # Add installation steps if you have the source
-    
+
     # =====================
     # Create wrapper scripts
     # =====================
@@ -283,25 +341,206 @@ EOF
     echo "Container build complete!"
 
 %runscript
-    echo "Conterminator v1.0 Container"
-    echo "Available tools:"
-    echo "  - samtools: $(samtools --version | head -1)"
-    echo "  - STAR: $(STAR --version)"
-    echo "  - FastQC: $(fastqc --version)"
-    echo "  - MultiQC: $(multiqc --version)"
-    echo "  - BLAST+: $(blastn -version | head -1)"
+    echo "========================================="
+    echo "Conterminator v1.1 Container"
+    echo "========================================="
     echo ""
-    echo "Run 'singularity exec conterminator.sif <tool> --help' for tool usage"
+    echo "Installed Tools and Versions:"
+    echo "----------------------------"
+    echo "STAR:           $(STAR --version 2>&1 | head -1)"
+    echo "Samtools:       $(samtools --version 2>&1 | grep -m1 '^samtools' | awk '{print $2}')"
+    echo "FastQC:         $(fastqc --version 2>&1 | grep Fast)"
+    echo "FastQ Screen:   $(fastq_screen --version 2>&1 | grep Fast | grep -oP 'v\K[\d\.]+' || echo '0.16.0')"
+    echo "Qualimap:       $(qualimap bamqc --version 2>&1 | grep -oP 'QualiMap v\.\K[\d\.]+')"
+    echo "Picard:         $(java -jar /opt/tools/picard/picard.jar CollectGcBiasMetrics --version 2>&1 | grep -v '^Picked up' | grep -oP 'Version:\s*\K[\d\.]+')"
+    echo "DeepTools:      $(deeptools --version 2>&1 | awk '{print $2}')"
+    echo "BEDTools:       $(bedtools --version 2>&1 | awk '{print $2}')"
+    echo "BLAST+:         $(blastn -version 2>&1 | head -1 | awk '{print $2}')"
+    echo "DecontaMiner:   1.4 (custom modified)"
+    echo "Seqtk:          $(seqtk 2>&1 | grep -oP 'Version: \K[\S]+')"
+    echo "BBMap:          $(reformat.sh --version 2>&1 | grep -oP 'BBTools version \K[\d\.]+')"
+    echo "MultiQC:        $(multiqc --version 2>&1 | awk '{print $3}')"
+    echo ""
+    echo "Python:         $(python3 --version 2>&1 | awk '{print $2}')"
+    echo "R:              $(R --version 2>&1 | grep 'R version' | awk '{print $3}')"
+    echo ""
+    echo "========================================="
+    echo "Usage: singularity exec conterminator.sif <tool> --help"
+    echo "========================================="
 
 %test
     # Test that key tools are installed and working
-    echo "Testing tool installations..."
-    samtools --version
-    STAR --version
-    fastqc --version
-    bedtools --version
-    blastn -version
-    multiqc --version
-    python3 --version
-    R --version
-    echo "All tests passed!"
+    echo "========================================="
+    echo "Testing Conterminator Tool Installations"
+    echo "========================================="
+    echo ""
+
+    FAILED=0
+
+    # Test STAR (2.7.11b)
+    echo -n "Testing STAR... "
+    VERSION=$(STAR --version 2>&1 | head -1)
+    if [ -n "$VERSION" ]; then
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test Samtools (1.22.1)
+    echo -n "Testing Samtools... "
+    VERSION=$(samtools --version 2>&1 | grep -m1 '^samtools' | awk '{print $2}')
+    if [ -n "$VERSION" ]; then
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test FastQC (0.12.1)
+    echo -n "Testing FastQC... "
+    VERSION=$(fastqc --version 2>&1 | grep Fast)
+    if [ -n "$VERSION" ]; then
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test FastQ Screen (0.16.0)
+    echo -n "Testing FastQ Screen... "
+    VERSION=$(fastq_screen --version 2>&1 | grep Fast | grep -oP 'v\K[\d\.]+')
+    if [ -n "$VERSION" ]; then
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test Qualimap (2.3)
+    echo -n "Testing Qualimap... "
+    if qualimap bamqc --version 2>&1 | grep -q "QualiMap"; then
+        VERSION=$(qualimap bamqc --version 2>&1 | grep -oP 'QualiMap v\.\K[\d\.]+')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test Picard (3.4.0)
+    echo -n "Testing Picard... "
+    if [ -f "/opt/tools/picard/picard.jar" ]; then
+        VERSION=$(java -jar /opt/tools/picard/picard.jar CollectGcBiasMetrics --version 2>&1 | grep -v '^Picked up' | grep -oP 'Version:\s*\K[\d\.]+')
+        if [ -n "$VERSION" ]; then
+            echo "OK - $VERSION"
+        else
+            echo "FAILED"
+            FAILED=$((FAILED+1))
+        fi
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test DeepTools (3.5.6)
+    echo -n "Testing DeepTools... "
+    if deeptools --version >/dev/null 2>&1; then
+        VERSION=$(deeptools --version 2>&1 | awk '{print $2}')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test BEDTools (2.31.1)
+    echo -n "Testing BEDTools... "
+    if bedtools --version >/dev/null 2>&1; then
+        VERSION=$(bedtools --version 2>&1 | awk '{print $2}')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test BLAST+ (2.17.0+)
+    echo -n "Testing BLAST+... "
+    if blastn -version >/dev/null 2>&1; then
+        VERSION=$(blastn -version 2>&1 | head -1 | awk '{print $2}')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test DecontaMiner (1.4)
+    echo -n "Testing DecontaMiner... "
+    if [ -d "/opt/tools/decontaminer" ]; then
+        echo "OK - 1.4 (custom modified)"
+    else
+        echo "FAILED - Directory not found"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test Seqtk
+    echo -n "Testing Seqtk... "
+    if seqtk 2>&1 | grep -q "Version:"; then
+        VERSION=$(seqtk 2>&1 | grep -oP 'Version: \K[\S]+')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test BBMap (39.37)
+    echo -n "Testing BBMap... "
+    BBMAP_OUTPUT=$(reformat.sh --version 2>&1)
+    if echo "$BBMAP_OUTPUT" | grep -q 'BBTools version'; then
+        VERSION=$(echo "$BBMAP_OUTPUT" | grep -oP 'BBTools version \K[\d\.]+')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test MultiQC
+    echo -n "Testing MultiQC... "
+    if multiqc --version >/dev/null 2>&1; then
+        VERSION=$(multiqc --version 2>&1 | awk '{print $3}')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test Python3
+    echo -n "Testing Python3... "
+    VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+    if [ -n "$VERSION" ]; then
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test R
+    echo -n "Testing R... "
+    R_OUTPUT=$(R --version)
+    if echo "$R_OUTPUT" | grep -q 'R version'; then
+        VERSION=$(echo -e "$R_OUTPUT" | grep -oP 'R version \K[\d\.]+')
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    echo ""
+    echo "========================================="
+    if [ $FAILED -eq 0 ]; then
+        echo "✓ All tests passed!"
+        echo "========================================="
+        exit 0
+    else
+        echo "✗ $FAILED test(s) failed!"
+        echo "========================================="
+        exit 1
+    fi
