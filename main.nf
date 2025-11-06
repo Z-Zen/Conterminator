@@ -36,7 +36,6 @@ params.bam_qc_subset_mapped              = 200000   // Mapped reads for QC (200k
 // READS SUBSETTING
 params.subset_unmapped_for_blast         = true   // Subset for BLAST
 params.subset_mapped_for_blast           = true   // Subset for BLAST
-params.blast_max_parallel                = 10     // Run up to 10 BLAST jobs in parallel
 params.subset_unmapped_for_decontaminer  = true   // Subset for DecontaMiner
 params.subset_mapped_for_decontaminer    = true   // Subset for DecontaMiner
 params.unmapped_subset_reads             = 100000 // Unmapped reads to keep (100k reads)
@@ -749,11 +748,6 @@ process COPY_SAMPLE_SHEET {
 process SUBSET_FASTQ_FOR_QC {
     tag "${sample}"
     publishDir "${params.outdir}/Input/subsampled_fastq/${sample}", mode: 'copy'
-    cpus { Math.min(2, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
 
     input:
     tuple val(sample), path(fastq1), path(fastq2)
@@ -796,12 +790,7 @@ process SUBSET_FASTQ_FOR_QC {
 process SUBSET_FASTQ_FOR_STAR {
     tag "${sample}"
     publishDir "${params.outdir}/Input/subsampled_fastq_star/${sample}", mode: 'copy'
-    cpus { Math.min(2, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), path(fastq1), path(fastq2)
 
@@ -880,10 +869,6 @@ process PREPARE_STRAIN_REFERENCE {
 process BUILD_STAR_INDEX {
     tag "${strain}"
     publishDir "${params.star_index_dir}", mode: 'copy', pattern: "${strain}"
-    cpus { Math.min(params.star_index_threads, params.max_cpus as int) }
-    memory { params.star_index_mem }
-    errorStrategy 'retry'
-    maxRetries 1
 
     input:
     tuple val(strain), path(fasta), path(gtf)
@@ -931,12 +916,7 @@ process BUILD_STAR_INDEX {
 process STAR_ALIGN {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Temporary/star_alignment/${sample}/${strain}", mode: 'copy'
-    cpus { Math.min(params.star_threads, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), path(fastq1), path(fastq2), val(strain), path(genome_dir)
 
@@ -973,7 +953,7 @@ process STAR_ALIGN {
         --outFileNamePrefix ${sample}_${strain}_ \\
         --outReadsUnmapped Fastx
     
-    ${params.samtools_bin} index ${sample}_${strain}_Aligned.sortedByCoord.out.bam
+    ${params.samtools_bin} index -@ ${task.cpus} ${sample}_${strain}_Aligned.sortedByCoord.out.bam
 
     echo "" >> ${sample}_${strain}_star_alignment_stats.txt
     echo "ALIGNMENT SUMMARY:" >> ${sample}_${strain}_star_alignment_stats.txt
@@ -985,8 +965,6 @@ process STAR_ALIGN {
 process PREP_STRAIN_REFERENCE_FOR_QC {
     tag "${strain}"
     publishDir "${params.outdir}/Input/strain_references/${strain}", mode: 'copy'
-    errorStrategy 'retry'
-    maxRetries 2
 
     input:
     tuple val(strain), path(fasta_gz), path(gtf)
@@ -1004,7 +982,7 @@ process PREP_STRAIN_REFERENCE_FOR_QC {
     zcat ${fasta_gz} > ${strain}.fa
 
     # Create fasta index
-    ${params.samtools_bin} faidx ${strain}.fa
+    ${params.samtools_bin} faidx -@ ${task.cpus} ${strain}.fa
 
     # Create sequence dictionary
     ${params.samtools_bin} dict ${strain}.fa > ${strain}.dict
@@ -1032,11 +1010,7 @@ process PREP_STRAIN_REFERENCE_FOR_QC {
 process INDEX_INPUT_BAM {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/indexed_bams/${sample}/${strain}", mode: 'copy'
-    cpus { Math.min(2, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-
+    
     input:
     tuple val(sample), val(strain), path(bam)
 
@@ -1052,12 +1026,7 @@ process INDEX_INPUT_BAM {
 process SUBSET_BAM_FOR_QC {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/subsampled_bams/${sample}/${strain}", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), val(strain), path(bam), path(bai)
 
@@ -1078,7 +1047,7 @@ process SUBSET_BAM_FOR_QC {
     echo "" >> ${sample}_${strain}_bam_subset_stats.txt
     
     # Count total mapped reads
-    TOTAL_MAPPED=\$(${params.samtools_bin} view -c -F 4 ${bam})
+    TOTAL_MAPPED=\$(${params.samtools_bin} view -@ ${task.cpus} -c -F 4 ${bam})
     echo "Total mapped reads: \$TOTAL_MAPPED" >> ${sample}_${strain}_bam_subset_stats.txt
 
     if [ "\$TOTAL_MAPPED" -gt "${params.bam_qc_subset_mapped}" ]; then
@@ -1087,22 +1056,22 @@ process SUBSET_BAM_FOR_QC {
         echo "Sampling fraction: \$FRACTION" >> ${sample}_${strain}_bam_subset_stats.txt
         
         # Subsample mapped reads only
-        ${params.samtools_bin} view -b -s \${FRACTION} -F 4 ${bam} > temp_mapped.bam
+        ${params.samtools_bin} view -@ ${task.cpus} -b -s \${FRACTION} -F 4 ${bam} > temp_mapped.bam
         
         # Verify actual count
-        ACTUAL_SAMPLED=\$(${params.samtools_bin} view -c temp_mapped.bam)
+        ACTUAL_SAMPLED=\$(${params.samtools_bin} view -@ ${task.cpus} -c temp_mapped.bam)
         echo "Actually sampled: \$ACTUAL_SAMPLED reads" >> ${sample}_${strain}_bam_subset_stats.txt
     else
         echo "Using all mapped reads (total: \$TOTAL_MAPPED < target: ${params.bam_qc_subset_mapped})" >> ${sample}_${strain}_bam_subset_stats.txt
-        ${params.samtools_bin} view -b -F 4 ${bam} > temp_mapped.bam
+        ${params.samtools_bin} view -@ ${task.cpus} -b -F 4 ${bam} > temp_mapped.bam
     fi
     
     # Sort and index
     ${params.samtools_bin} sort -@ ${task.cpus} -o ${sample}_${strain}_subset.bam temp_mapped.bam
-    ${params.samtools_bin} index ${sample}_${strain}_subset.bam
+    ${params.samtools_bin} index -@ ${task.cpus} ${sample}_${strain}_subset.bam
     
     # Report final count
-    SUBSET_COUNT=\$(${params.samtools_bin} view -c ${sample}_${strain}_subset.bam)
+    SUBSET_COUNT=\$(${params.samtools_bin} view -@ ${task.cpus} -c ${sample}_${strain}_subset.bam)
     echo "Subsampled reads: \$SUBSET_COUNT" >> ${sample}_${strain}_bam_subset_stats.txt
     echo "Purpose: QC tools (DeepTools, Picard, BEDTools, Qualimap, Mapinsights)" >> ${sample}_${strain}_bam_subset_stats.txt
     
@@ -1113,12 +1082,7 @@ process SUBSET_BAM_FOR_QC {
 process SUBSET_UNMAPPED_FOR_BLAST {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/subsampled_unmapped_blast/${sample}/${strain}", mode: 'copy'
-    cpus { Math.min(2, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), val(strain), path(unmapped_r1), path(unmapped_r2)
 
@@ -1176,12 +1140,7 @@ process SUBSET_UNMAPPED_FOR_BLAST {
 process SUBSET_UNMAPPED_FOR_DECONTAMINER {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/subsampled_unmapped_decontaminer/${sample}/${strain}", mode: 'copy'
-    cpus { Math.min(2, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), val(strain), path(unmapped_r1), path(unmapped_r2)
 
@@ -1238,9 +1197,6 @@ process SUBSET_UNMAPPED_FOR_DECONTAMINER {
 process DEEPTOOLS_GC {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/deeptools_gc_bias/${sample}/", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'retry'; maxRetries 2
 
     input:
     tuple val(sample), path(bam), path(bai), val(bam_type)
@@ -1275,8 +1231,6 @@ process DEEPTOOLS_GC {
 process PICARD_GC_BIAS {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/picard_gc_bias/${sample}", mode: 'copy'
-    memory { params.max_mem }
-    errorStrategy 'retry'; maxRetries 2
 
     input:
     tuple val(sample), path(bam), path(bai), val(bam_type)
@@ -1314,9 +1268,6 @@ process PICARD_GC_BIAS {
 process BEDTOOLS_GC_COVERAGE {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/bedtools_gc/${sample}/", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'retry'; maxRetries 2
 
     input:
     tuple val(sample), path(bam), path(bai), val(bam_type)
@@ -1364,11 +1315,7 @@ process BEDTOOLS_GC_COVERAGE {
 process QUALIMAP_BAMQC {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/qualimap/${sample}/bamqc", mode: 'copy'
-    cpus { Math.min(params.qualimap_threads, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'retry'; maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), val(strain), path(bam), path(bai), val(bam_type)
     path ref
@@ -1409,11 +1356,7 @@ process QUALIMAP_BAMQC {
 process QUALIMAP_RNASEQ {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/qualimap/${sample}/rnaseq", mode: 'copy'
-    cpus { Math.min(params.qualimap_threads, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'retry'; maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), val(strain), path(bam), path(bai), val(bam_type)
 
@@ -1467,9 +1410,6 @@ process QUALIMAP_RNASEQ {
 process MAPINSIGHTS {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/mapinsights/${sample}", mode: 'copy'
-    cpus { Math.min(8, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'ignore'
 
     input:
     tuple val(sample), path(bam), path(bai), val(bam_type)
@@ -1498,9 +1438,9 @@ process MAPINSIGHTS {
             ${params.mapinsights_opts}
     else
         mkdir -p ${sample}_mapinsights
-        ${params.samtools_bin} flagstat ${bam} > ${sample}_mapinsights/${sample}.flagstat
-        ${params.samtools_bin} stats ${bam} > ${sample}_mapinsights/${sample}.stats
-        ${params.samtools_bin} idxstats ${bam} > ${sample}_mapinsights/${sample}.idxstats
+        ${params.samtools_bin} flagstat -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.flagstat
+        ${params.samtools_bin} stats -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.stats
+        ${params.samtools_bin} idxstats -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.idxstats
     fi
     """
 }
@@ -1508,10 +1448,6 @@ process MAPINSIGHTS {
 process FASTQ_SCREEN {
     tag "${sample}"
     publishDir "${params.outdir}/Output/fastq_screen/${sample}", mode: 'copy'
-    cpus { Math.min(params.fastq_screen_threads as int, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'retry'
-    maxRetries 2
 
     input:
     tuple val(sample), path(fastq1), path(fastq2)
@@ -1539,11 +1475,6 @@ process FASTQ_SCREEN {
 process FASTQC_INPUT_FASTQ {
     tag "${sample}"
     publishDir "${params.outdir}/Output/fastqc/${sample}/input_fastq", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
 
     input:
     tuple val(sample), path(fastq1), path(fastq2)
@@ -1568,8 +1499,6 @@ process FASTQC_INPUT_FASTQ {
 process DECONTAMINER_STEP1_STAR_MAPPED {
     tag "${sample} ${reads_type}"
     publishDir "${params.outdir}/Temporary/decontaminer/${sample}/step1_decontaminer_mapped", mode: 'copy'
-    cpus { Math.min(8, params.max_cpus as int) }
-    memory { params.max_mem }
 
     input:
     tuple val(sample), path(mapped_bam), path(mapped_bai), val(reads_type)
@@ -1595,7 +1524,7 @@ process DECONTAMINER_STEP1_STAR_MAPPED {
     SAMPLE="${sample}"
     mkdir -p input_fastq
 
-    ${params.samtools_bin} fastq -1 input_fastq/\${SAMPLE}_mapped_1.fq -2 input_fastq/\${SAMPLE}_mapped_2.fq -0 /dev/null -s /dev/null -N ${mapped_bam}
+    ${params.samtools_bin} fastq -@ ${task.cpus} -1 input_fastq/\${SAMPLE}_mapped_1.fq -2 input_fastq/\${SAMPLE}_mapped_2.fq -0 /dev/null -s /dev/null -N ${mapped_bam}
     
     echo "Running DecontaMiner on MAPPED reads...."
     bash ${params.decontaminer_dir}/shell_scripts/decontaMiner.sh \\
@@ -1615,8 +1544,6 @@ process DECONTAMINER_STEP1_STAR_MAPPED {
 process DECONTAMINER_STEP1_STAR_UNMAPPED {
     tag "${sample} ${reads_type}"
     publishDir "${params.outdir}/Temporary/decontaminer/${sample}/step1_decontaminer_unmapped", mode: 'copy'
-    cpus { Math.min(8, params.max_cpus as int) }
-    memory { params.max_mem }
 
     input:
     tuple val(sample), path(unmapped_r1), path(unmapped_r2), val(reads_type)
@@ -1663,9 +1590,6 @@ process DECONTAMINER_STEP1_STAR_UNMAPPED {
 process DECONTAMINER_STEP2 {
     tag "${sample} ${reads_type}"
     publishDir "${params.outdir}/Temporary/decontaminer/${sample}/step2_filtering", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'ignore'
 
     input:
     tuple val(sample), val(reads_type), path(output_dir)
@@ -1717,9 +1641,6 @@ process DECONTAMINER_STEP2 {
 process DECONTAMINER_STEP3 {
     tag "${sample} ${reads_type}"
     publishDir "${params.outdir}/Output/decontaminer/${sample}/", mode: 'copy'
-    cpus { Math.min(2, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'ignore'
 
     input:
     tuple val(sample), val(reads_type), path(filtered_dir)
@@ -1786,12 +1707,7 @@ process DECONTAMINER_STEP3 {
 process FASTQC_MAPPED_BAM {
     tag "${sample} ${strain}"
     publishDir "${params.outdir}/Output/fastqc/${sample}/mapped_bam", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), val(strain), path(bam), path(bai)
 
@@ -1816,12 +1732,7 @@ process FASTQC_MAPPED_BAM {
 process FASTQC_UNMAPPED_FASTQ {
     tag "${sample} ${strain}"
     publishDir "${params.outdir}/Output/fastqc/${sample}/unmapped_fastq", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory '4 GB'
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_parallel_samples
-
+    
     input:
     tuple val(sample), val(strain), path(fastq_r1), path(fastq_r2)
 
@@ -1853,10 +1764,6 @@ process FASTQC_UNMAPPED_FASTQ {
 process BLAST_MAPPED_READS_MULTI {
     tag "${sample}_${db_name}"
     publishDir "${params.outdir}/Output/contamination_check/${sample}/mapped/${db_name}", mode: 'copy'
-    cpus { Math.min(8, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'terminate'
-    maxForks params.blast_max_parallel
 
     input:
     tuple val(sample), val(strain), path(bam), path(bai), val(db_name), val(db_path)
@@ -1881,6 +1788,7 @@ process BLAST_MAPPED_READS_MULTI {
     
     # Extract mapped reads from BAM to FastQ
     ${params.samtools_bin} fastq \\
+        -@ ${task.cpus} \\
         -1 ${sample}_mapped_R1.fastq \\
         -2 ${sample}_mapped_R2.fastq \\
         -0 /dev/null \\
@@ -1965,10 +1873,6 @@ process BLAST_MAPPED_READS_MULTI {
 process BLAST_UNMAPPED_READS_MULTI {
     tag "${sample}_${db_name}"
     publishDir "${params.outdir}/Output/contamination_check/${sample}/unmapped/${db_name}", mode: 'copy'
-    cpus { Math.min(8, params.max_cpus as int) }
-    memory { params.max_mem }
-    errorStrategy 'terminate'
-    maxForks params.blast_max_parallel
 
     input:
     tuple val(sample), path(r1_fastq), path(r2_fastq), val(db_name), val(db_path)
@@ -2077,10 +1981,7 @@ process BLAST_UNMAPPED_READS_MULTI {
 process BLAST_PLOT_CHARTS {
     tag "${sample}_${db_name}"
     publishDir "${params.outdir}/Output/contamination_check/${sample}/${reads_type}/${db_name}/plots", mode: 'copy'
-    cpus 1
-    memory '4 GB'
-    errorStrategy 'ignore'
-
+    
     input:
     tuple val(sample), val(db_name), path(blast_tsv), path(blast_summary), val(reads_type)
 
@@ -2156,10 +2057,7 @@ if genus_counts:
 process CONTAMINATION_FINAL_REPORT_MULTI {
     tag "${sample}"
     publishDir "${params.outdir}/Output/contamination_check/${sample}/final_report", mode: 'copy'
-    cpus 2
-    memory '4 GB'
-    errorStrategy 'ignore'
-
+    
     input:
     tuple val(sample), path(mapped_stats), path(unmapped_stats), path(blast_summaries), path(top_hits_files)
 
@@ -2200,8 +2098,6 @@ EOF
 
 process MULTIQC {
     publishDir "${params.outdir}/Output/multiqc", mode: 'copy'
-    cpus { Math.min(4, params.max_cpus as int) }
-    memory '8 GB'
 
     input:
     path('*')

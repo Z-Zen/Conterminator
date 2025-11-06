@@ -1,0 +1,6 @@
+sample	strain	type	read1	read2
+sample1	C57BL_6J	fastq	/path/to/sample1_R1.fastq.gz	/path/to/sample1_R2.fastq.gz
+sample2	C57BL_6J	bam	/path/to/sample2.bam
+sample3	DBA_2J	unmapped_fastq	/path/to/sample3_unmapped_R1.fastq.gz	/path/to/sample3_unmapped_R2.fastq.gz
+sample4		fastq	/path/to/sample4_R1.fastq.gz	/path/to/sample4_R2.fastq.gz
+sample5		bam	/path/to/sample5.bam
