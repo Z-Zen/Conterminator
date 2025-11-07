@@ -283,7 +283,7 @@ EOF
     # Install R and required packages
     # =====================
     echo "Installing R packages..."
-    R -e "install.packages(c('ggplot2', 'dplyr', 'tidyr', 'reshape2', 'RColorBrewer'), repos='https://cloud.r-project.org/')"
+    R -e "install.packages(c('ggplot2', 'dplyr', 'tidyr', 'reshape2', 'RColorBrewer', 'gridExtra'), repos='https://cloud.r-project.org/')"
     
     # =====================
     # Install Qualimap (2.3)

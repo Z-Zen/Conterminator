@@ -10,7 +10,6 @@ params.help = false
 
 // Inputs
 params.sample_sheet             = null
-params.outdir                   = "results"
 params.fastq_pattern            = null
 
 // FLEXIBLE FastQ SUBSETTING
@@ -125,6 +124,52 @@ params.blast_plot_interac     = "${projectDir}/bin/py/interactive_plot_blast_pie
 params.run_multiqc            = true
 params.multiqc_bin            = "multiqc"
 params.multiqc_config         = null
+
+params.singularity_path = '/absolute/path/to/conterminator.sif'
+
+if (params.outdir == null){
+    println "Please specify the parameter '--outdir [output folder]'"
+    println "Run '~/nextflow run main.nf --help' for more information"
+    exit 1
+}
+
+if (workflow.profile.contains('singularity')) {
+    if (params.singularity_path && !file(params.singularity_path).exists()) {
+        println "ERROR: Singularity image '${params.singularity_path}' does not exist."
+        println "Please provide a valid path with '--singularity_path /full/path/to/conterminator.sif'"
+        println "Or check ${workflow.manifest.homePage} for instructions on how to build the image."
+        exit 1
+    }
+}
+
+///////////////////////////////////////////
+// Copy Nextflow PID to output directory //
+///////////////////////////////////////////
+
+def nextflowPid = new File(System.getProperty("user.dir") + "/.nextflow.pid")
+def target = new File(params.outdir + "/pid.txt")
+
+// Ensure output directory exists
+def outputDir = new File(params.outdir)
+if (!outputDir.exists()) {
+    outputDir.mkdirs()
+}
+
+// Read PID if file exists
+def pidContent = nextflowPid.exists() ? nextflowPid.text : "PID file not found\n"
+
+// Build pid content string
+def pidString = "---------------------\n" +
+            pidContent +
+            "${workflow.commandLine}\n" +
+            "Start: ${workflow.start.format('dd-MMM-yyyy HH:mm:ss')}\n"
+
+// Write or append to target
+if (target.exists()) {
+    target.append(pidString)
+} else {
+    target.write(pidString)
+}
 
 def content = new File('name.txt').text
 
@@ -684,6 +729,7 @@ Run Name:     ${workflow.runName}
 Session ID:   ${workflow.sessionId}
 Started:      ${workflow.start}
 Profile:      ${workflow.profile}
+${workflow.profile.contains('singularity') ? "Singularity:  ${params.singularity_path ?: 'enabled'}" : ''}
 Work Dir:     ${workflow.workDir}
 Output Dir:   ${params.outdir}
 Command Line: ${workflow.commandLine}
@@ -790,7 +836,7 @@ process SUBSET_FASTQ_FOR_QC {
 process SUBSET_FASTQ_FOR_STAR {
     tag "${sample}"
     publishDir "${params.outdir}/Input/subsampled_fastq_star/${sample}", mode: 'copy'
-    
+
     input:
     tuple val(sample), path(fastq1), path(fastq2)
 
@@ -916,7 +962,7 @@ process BUILD_STAR_INDEX {
 process STAR_ALIGN {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Temporary/star_alignment/${sample}/${strain}", mode: 'copy'
-    
+
     input:
     tuple val(sample), path(fastq1), path(fastq2), val(strain), path(genome_dir)
 
@@ -1010,7 +1056,7 @@ process PREP_STRAIN_REFERENCE_FOR_QC {
 process INDEX_INPUT_BAM {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/indexed_bams/${sample}/${strain}", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(bam)
 
@@ -1026,7 +1072,7 @@ process INDEX_INPUT_BAM {
 process SUBSET_BAM_FOR_QC {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/subsampled_bams/${sample}/${strain}", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(bam), path(bai)
 
@@ -1082,7 +1128,7 @@ process SUBSET_BAM_FOR_QC {
 process SUBSET_UNMAPPED_FOR_BLAST {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/subsampled_unmapped_blast/${sample}/${strain}", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(unmapped_r1), path(unmapped_r2)
 
@@ -1140,7 +1186,7 @@ process SUBSET_UNMAPPED_FOR_BLAST {
 process SUBSET_UNMAPPED_FOR_DECONTAMINER {
     tag "${sample}_${strain}"
     publishDir "${params.outdir}/Input/subsampled_unmapped_decontaminer/${sample}/${strain}", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(unmapped_r1), path(unmapped_r2)
 
@@ -1315,7 +1361,7 @@ process BEDTOOLS_GC_COVERAGE {
 process QUALIMAP_BAMQC {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/qualimap/${sample}/bamqc", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(bam), path(bai), val(bam_type)
     path ref
@@ -1356,7 +1402,7 @@ process QUALIMAP_BAMQC {
 process QUALIMAP_RNASEQ {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/qualimap/${sample}/rnaseq", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(bam), path(bai), val(bam_type)
 
@@ -1707,7 +1753,7 @@ process DECONTAMINER_STEP3 {
 process FASTQC_MAPPED_BAM {
     tag "${sample} ${strain}"
     publishDir "${params.outdir}/Output/fastqc/${sample}/mapped_bam", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(bam), path(bai)
 
@@ -1732,7 +1778,7 @@ process FASTQC_MAPPED_BAM {
 process FASTQC_UNMAPPED_FASTQ {
     tag "${sample} ${strain}"
     publishDir "${params.outdir}/Output/fastqc/${sample}/unmapped_fastq", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(strain), path(fastq_r1), path(fastq_r2)
 
@@ -1981,7 +2027,7 @@ process BLAST_UNMAPPED_READS_MULTI {
 process BLAST_PLOT_CHARTS {
     tag "${sample}_${db_name}"
     publishDir "${params.outdir}/Output/contamination_check/${sample}/${reads_type}/${db_name}/plots", mode: 'copy'
-    
+
     input:
     tuple val(sample), val(db_name), path(blast_tsv), path(blast_summary), val(reads_type)
 
@@ -2057,7 +2103,7 @@ if genus_counts:
 process CONTAMINATION_FINAL_REPORT_MULTI {
     tag "${sample}"
     publishDir "${params.outdir}/Output/contamination_check/${sample}/final_report", mode: 'copy'
-    
+
     input:
     tuple val(sample), path(mapped_stats), path(unmapped_stats), path(blast_summaries), path(top_hits_files)
 
@@ -2260,6 +2306,13 @@ workflow {
         COPY_SAMPLE_SHEET(file(params.sample_sheet))
     }
 
+    // Initialize channels that may be defined conditionally
+    star_unmapped_fastq = Channel.empty()
+    star_aligned_bams = Channel.empty()
+    bams_for_qc = Channel.empty()
+    all_bams_ch = Channel.empty()
+    input_bams = Channel.empty()
+
     // Process FASTQs (will be skipped if channel is empty)
     // Subset for FastQ QC
         if (params.subset_for_fastq_qc) {
@@ -2420,18 +2473,8 @@ workflow {
     // SECTION 4: BAM QC TOOLS
     // ===================================
 
-    // Combine BAMs from STAR alignment and input BAMs
-    def all_bams_ch = Channel.empty()
-
-    // Add STAR-aligned BAMs if they exist
-    if (binding.hasVariable('star_aligned_bams') && star_aligned_bams != null) {
-        all_bams_ch = all_bams_ch.mix(star_aligned_bams)
-    }
-
-    // Add input BAMs if they exist
-    if (binding.hasVariable('input_bams') && input_bams != null) {
-        all_bams_ch = all_bams_ch.mix(input_bams)
-    }
+    // Combine all BAM sources (Nextflow handles empty channels automatically)
+    all_bams_ch = all_bams_ch.mix(star_aligned_bams).mix(input_bams)
 
     // Process all BAMs for QC
     if (params.subset_bam_for_qc) {
@@ -2441,6 +2484,7 @@ workflow {
             tuple(sample, strain, bam, bai, "subset")
         }
     } else {
+        bams_for_qc = all_bams_ch
         qc_bams = all_bams_ch.map { sample, strain, bam, bai ->
             tuple(sample, strain, bam, bai, "full")
         }
@@ -2455,110 +2499,109 @@ workflow {
                     tuple(sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit)
                 }
 
-            // Run QC tools
-            if (params.run_deeptools) {
-                qc_bams_for_deeptools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
-                    tuple("${sample}_${strain}", bam, bai, type, twobit, eff_size)
-                }
-                // Group by strain and run once per strain
-                qc_bams_for_deeptools
-                    .map { id, bam, bai, type, twobit, eff_size -> tuple(eff_size.name, id, bam, bai, type, twobit, eff_size) }
-                    .groupTuple(by: 0)
-                    .flatMap { key, ids, bams, bais, types, twobits, eff_sizes ->
-                        // Zip all inputs together
-                        [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
-                            tuple(id, bam, bai, type, twobits[0], eff_sizes[0])
-                        }
+        // Run QC tools
+        if (params.run_deeptools) {
+            qc_bams_for_deeptools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+                tuple("${sample}_${strain}", bam, bai, type, twobit, eff_size)
+            }
+            // Group by strain and run once per strain
+            qc_bams_for_deeptools
+                .map { id, bam, bai, type, twobit, eff_size -> tuple(eff_size.name, id, bam, bai, type, twobit, eff_size) }
+                .groupTuple(by: 0)
+                .flatMap { key, ids, bams, bais, types, twobits, eff_sizes ->
+                    // Zip all inputs together
+                    [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
+                        tuple(id, bam, bai, type, twobits[0], eff_sizes[0])
                     }
-                    .set { deeptools_grouped }
-                DEEPTOOLS_GC(deeptools_grouped.map { id, bam, bai, type, twobit, eff_size -> tuple(id, bam, bai, type) },
-                            deeptools_grouped.first().map { id, bam, bai, type, twobit, eff_size -> twobit },
-                            deeptools_grouped.first().map { id, bam, bai, type, twobit, eff_size -> eff_size })
-                ran_deeptools = true
+                }
+                .set { deeptools_grouped }
+            DEEPTOOLS_GC(deeptools_grouped.map { id, bam, bai, type, twobit, eff_size -> tuple(id, bam, bai, type) },
+                        deeptools_grouped.first().map { id, bam, bai, type, twobit, eff_size -> twobit },
+                        deeptools_grouped.first().map { id, bam, bai, type, twobit, eff_size -> eff_size })
+            ran_deeptools = true
+        }
+
+        if (params.run_picard_gc) {
+            qc_bams_for_picard = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+                tuple("${sample}_${strain}", bam, bai, type, fa)
+            }
+            // Group by reference (strain) and run once per strain
+            qc_bams_for_picard
+                .map { id, bam, bai, type, fa -> tuple(fa.name, id, bam, bai, type, fa) }
+                .groupTuple(by: 0)
+                .flatMap { key, ids, bams, bais, types, fas ->
+                    [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
+                        tuple(id, bam, bai, type, fas[0])
+                    }
+                }
+                .set { picard_grouped }
+            PICARD_GC_BIAS(picard_grouped.map { id, bam, bai, type, fa -> tuple(id, bam, bai, type) },
+                            picard_grouped.first().map { id, bam, bai, type, fa -> fa })
+            ran_picard = true
+        }
+
+        if (params.run_bedtools_gc) {
+            qc_bams_for_bedtools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+                tuple("${sample}_${strain}", bam, bai, type, fa, bed)
+            }
+            // Group by reference (strain) and run once per strain
+            qc_bams_for_bedtools
+                .map { id, bam, bai, type, fa, bed -> tuple(fa.name, id, bam, bai, type, fa, bed) }
+                .groupTuple(by: 0)
+                .flatMap { key, ids, bams, bais, types, fas, beds ->
+                    [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
+                        tuple(id, bam, bai, type, fas[0], beds[0])
+                    }
+                }
+                .set { bedtools_grouped }
+            BEDTOOLS_GC_COVERAGE(bedtools_grouped.map { id, bam, bai, type, fa, bed -> tuple(id, bam, bai, type) },
+                                bedtools_grouped.first().map { id, bam, bai, type, fa, bed -> fa },
+                                bedtools_grouped.first().map { id, bam, bai, type, fa, bed -> bed })
+            ran_bedtools = true
+        }
+
+        if (params.run_mapinsights) {
+            qc_bams_for_mapinsights = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+                tuple("${sample}_${strain}", bam, bai, type, fa)
+            }
+            // Group by reference (strain) and run once per strain
+            qc_bams_for_mapinsights
+                .map { id, bam, bai, type, fa -> tuple(fa.name, id, bam, bai, type, fa) }
+                .groupTuple(by: 0)
+                .flatMap { key, ids, bams, bais, types, fas ->
+                    [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
+                        tuple(id, bam, bai, type, fas[0])
+                    }
+                }
+                .set { mapinsights_grouped }
+            MAPINSIGHTS(mapinsights_grouped.map { id, bam, bai, type, fa -> tuple(id, bam, bai, type) },
+                        mapinsights_grouped.first().map { id, bam, bai, type, fa -> fa })
+        }
+
+        if (params.run_qualimap) {
+            qc_bams_for_qualimap = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+                tuple("${sample}_${strain}", strain, bam, bai, type, fa)
             }
 
-            if (params.run_picard_gc) {
-                qc_bams_for_picard = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
-                    tuple("${sample}_${strain}", bam, bai, type, fa)
-                }
+            if (params.qualimap_mode == "bamqc" || params.qualimap_mode == "both") {
                 // Group by reference (strain) and run once per strain
-                qc_bams_for_picard
-                    .map { id, bam, bai, type, fa -> tuple(fa.name, id, bam, bai, type, fa) }
+                qc_bams_for_qualimap
+                    .map { id, strain, bam, bai, type, fa -> tuple(fa.name, id, strain, bam, bai, type, fa) }
                     .groupTuple(by: 0)
-                    .flatMap { key, ids, bams, bais, types, fas ->
-                        [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
-                            tuple(id, bam, bai, type, fas[0])
+                    .flatMap { key, ids, strains, bams, bais, types, fas ->
+                        [ids, strains, bams, bais, types].transpose().collect { id, strain, bam, bai, type ->
+                            tuple(id, strain, bam, bai, type, fas[0])
                         }
                     }
-                    .set { picard_grouped }
-                PICARD_GC_BIAS(picard_grouped.map { id, bam, bai, type, fa -> tuple(id, bam, bai, type) },
-                              picard_grouped.first().map { id, bam, bai, type, fa -> fa })
-                ran_picard = true
+                    .set { qualimap_grouped }
+                QUALIMAP_BAMQC(qualimap_grouped.map { id, strain, bam, bai, type, fa -> tuple(id, strain, bam, bai, type) },
+                                qualimap_grouped.first().map { id, strain, bam, bai, type, fa -> fa })
+                ran_qualimap_bamqc = true
             }
 
-            if (params.run_bedtools_gc) {
-                qc_bams_for_bedtools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
-                    tuple("${sample}_${strain}", bam, bai, type, fa, bed)
-                }
-                // Group by reference (strain) and run once per strain
-                qc_bams_for_bedtools
-                    .map { id, bam, bai, type, fa, bed -> tuple(fa.name, id, bam, bai, type, fa, bed) }
-                    .groupTuple(by: 0)
-                    .flatMap { key, ids, bams, bais, types, fas, beds ->
-                        [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
-                            tuple(id, bam, bai, type, fas[0], beds[0])
-                        }
-                    }
-                    .set { bedtools_grouped }
-                BEDTOOLS_GC_COVERAGE(bedtools_grouped.map { id, bam, bai, type, fa, bed -> tuple(id, bam, bai, type) },
-                                    bedtools_grouped.first().map { id, bam, bai, type, fa, bed -> fa },
-                                    bedtools_grouped.first().map { id, bam, bai, type, fa, bed -> bed })
-                ran_bedtools = true
-            }
-
-            if (params.run_mapinsights) {
-                qc_bams_for_mapinsights = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
-                    tuple("${sample}_${strain}", bam, bai, type, fa)
-                }
-                // Group by reference (strain) and run once per strain
-                qc_bams_for_mapinsights
-                    .map { id, bam, bai, type, fa -> tuple(fa.name, id, bam, bai, type, fa) }
-                    .groupTuple(by: 0)
-                    .flatMap { key, ids, bams, bais, types, fas ->
-                        [ids, bams, bais, types].transpose().collect { id, bam, bai, type ->
-                            tuple(id, bam, bai, type, fas[0])
-                        }
-                    }
-                    .set { mapinsights_grouped }
-                MAPINSIGHTS(mapinsights_grouped.map { id, bam, bai, type, fa -> tuple(id, bam, bai, type) },
-                           mapinsights_grouped.first().map { id, bam, bai, type, fa -> fa })
-            }
-
-            if (params.run_qualimap) {
-                qc_bams_for_qualimap = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
-                    tuple("${sample}_${strain}", strain, bam, bai, type, fa)
-                }
-
-                if (params.qualimap_mode == "bamqc" || params.qualimap_mode == "both") {
-                    // Group by reference (strain) and run once per strain
-                    qc_bams_for_qualimap
-                        .map { id, strain, bam, bai, type, fa -> tuple(fa.name, id, strain, bam, bai, type, fa) }
-                        .groupTuple(by: 0)
-                        .flatMap { key, ids, strains, bams, bais, types, fas ->
-                            [ids, strains, bams, bais, types].transpose().collect { id, strain, bam, bai, type ->
-                                tuple(id, strain, bam, bai, type, fas[0])
-                            }
-                        }
-                        .set { qualimap_grouped }
-                    QUALIMAP_BAMQC(qualimap_grouped.map { id, strain, bam, bai, type, fa -> tuple(id, strain, bam, bai, type) },
-                                  qualimap_grouped.first().map { id, strain, bam, bai, type, fa -> fa })
-                    ran_qualimap_bamqc = true
-                }
-
-                if (params.qualimap_mode == "rnaseq" || params.qualimap_mode == "both") {
-                    QUALIMAP_RNASEQ(qc_bams_for_qualimap.map { id, strain, bam, bai, type, fa -> tuple(id, strain, bam, bai, type) })
-                    ran_qualimap_rnaseq = true
-                }
+            if (params.qualimap_mode == "rnaseq" || params.qualimap_mode == "both") {
+                QUALIMAP_RNASEQ(qc_bams_for_qualimap.map { id, strain, bam, bai, type, fa -> tuple(id, strain, bam, bai, type) })
+                ran_qualimap_rnaseq = true
             }
         }
     }
@@ -2765,22 +2808,22 @@ workflow {
                     // GENERATE PLOTS FOR ALL BLAST RESULTS
                     // ===================================
                     if (params.run_blast_plots) {
-                    all_blast_for_plotting = Channel.empty()
-                    
-                    if (params.subset_mapped_for_blast) {
-                        mapped_labeled = BLAST_MAPPED_READS_MULTI.out.for_plotting
-                            .map { it + ['mapped'] }
-                        all_blast_for_plotting = all_blast_for_plotting.mix(mapped_labeled)
+                        all_blast_for_plotting = Channel.empty()
+                        
+                        if (params.subset_mapped_for_blast) {
+                            mapped_labeled = BLAST_MAPPED_READS_MULTI.out.for_plotting
+                                .map { it + ['mapped'] }
+                            all_blast_for_plotting = all_blast_for_plotting.mix(mapped_labeled)
+                        }
+                        
+                        if (params.subset_unmapped_for_blast) {
+                            unmapped_labeled = BLAST_UNMAPPED_READS_MULTI.out.for_plotting
+                                .map { it + ['unmapped'] }
+                            all_blast_for_plotting = all_blast_for_plotting.mix(unmapped_labeled)
+                        }
+                        
+                        BLAST_PLOT_CHARTS(all_blast_for_plotting)
                     }
-                    
-                    if (params.subset_unmapped_for_blast) {
-                        unmapped_labeled = BLAST_UNMAPPED_READS_MULTI.out.for_plotting
-                            .map { it + ['unmapped'] }
-                        all_blast_for_plotting = all_blast_for_plotting.mix(unmapped_labeled)
-                    }
-                    
-                    BLAST_PLOT_CHARTS(all_blast_for_plotting)
-                }
                 }
             }
         }
@@ -2880,6 +2923,9 @@ workflow {
 // ===================================
 
 workflow.onComplete {
+    def singularityUsed = workflow.profile.contains('singularity')
+    def singularityInfo = singularityUsed ? "\n    Singularity: ${params.singularity_path ?: 'enabled'}" : ''
+
     println """
     ========================================
     QC Pipeline Completed
@@ -2889,15 +2935,15 @@ workflow.onComplete {
     Output:   ${params.outdir}
     Input:    ${params.sample_sheet}
     ${params.sample_sheet ? "Sample Sheet: ${params.sample_sheet}" : ''}
-    ${params.strain ? "Strains:  ${params.strain}" : ''}
-    
+    ${params.strain ? "Strains:  ${params.strain}" : ''}${singularityInfo}
+
     SUBSAMPLING SUMMARY:
     ${params.subset_for_fastq_qc ? "  ✓ FastQ QC: ${params.subset_fastq_qc_reads} reads" : "  X FastQ QC: Full FASTQs"}
     ${params.subset_for_star ? "  ✓ STAR: ${params.subset_star_reads} reads" : "  X STAR: Full FASTQs"}
     ${params.subset_bam_for_qc ? "  ✓ BAM QC: ${params.bam_qc_subset_mapped} reads" : "  X BAM QC: Full BAMs"}
     ${params.subset_unmapped_for_blast ? "  ✓ BLAST: ${params.unmapped_subset_reads} reads" : "  X BLAST: Full unmapped"}
     ${params.subset_unmapped_for_decontaminer ? "  ✓ DecontaMiner: ${params.unmapped_subset_reads} reads" : "  X DecontaMiner: Full unmapped"}
-    
+
     ${params.run_multiqc ? "To generate MultiQC report:\n    cd ${params.outdir} && multiqc . --force" : ''}
     ========================================
     """

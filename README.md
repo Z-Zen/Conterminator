@@ -12,13 +12,17 @@ A comprehensive Nextflow pipeline for RNA-seq quality control and contamination 
 
 ### Key Features
 
+- **Flexible input handling**: Direct file paths for FASTQ, pre-aligned BAM, or unmapped reads
 - **Strain-specific alignment** with STAR using custom pseudogenomes or reference genome
 - **Multi-database contamination screening** via BLAST
 - **Microbial contamination detection** using DecontaMiner
 - **Comprehensive QC suite**: FastQC, FastQ Screen, Qualimap, DeepTools, Picard, BEDTools
+- **Singularity container** with all tools bundled for reproducible execution
+- **SLURM cluster support** with intelligent job scheduling and resource management
+- **Automatic retry** with dynamic memory scaling on out-of-memory errors
 - **Flexible subsampling** for performance optimization
 - **Interactive visualizations** and MultiQC reporting
-- **Sample sheet support** for batch processing with per-sample strain assignment
+- **Per-sample strain assignment** with optional default (GRCm39) for mixed experiments
 - **Highly configurable** with sensible defaults
 
 ## Table of Contents
@@ -31,17 +35,19 @@ A comprehensive Nextflow pipeline for RNA-seq quality control and contamination 
 - [Configuration](#configuration)
 - [Output Structure](#output-structure)
 - [Troubleshooting](#troubleshooting)
-- [To do](#todo)
+- [Execution Profiles](#execution-profiles)
+- [Singularity Container](#singularity-container)
 - [Contact](#contact)
 
 ## Requirements
 
 ### Software Dependencies
 
-- **Nextflow** ≥ 23.04.0
+- **Nextflow** ≥ 23.04.0 (Run `curl -s https://get.nextflow.io | bash` to install)
 - **Java** ≥ 11
-- **Python** ≥ 3.7
-- **R** ≥ 4.0
+- **Singularity** ≥ 3.5 (optional, for containerized execution)
+
+**Note:** When using Singularity, Python and R dependencies are bundled in the container.
 
 ### Required Tools
 
@@ -98,85 +104,216 @@ params {
 }
 ```
 
+### Option 1: Native Installation
+
+Install all required tools manually and configure paths in `nextflow.config`.
+
+### Option 2: Singularity Container (Recommended)
+
+Build the Singularity container with all dependencies bundled:
+
+```bash
+# Build the container (requires sudo)
+sudo singularity build conterminator.sif conterminator.def
+
+# Test the build
+singularity test conterminator.sif
+```
+
+The container includes all required bioinformatics tools pre-configured.
+
 ### Test Installation
 
 ```bash
-nextflow run main_full.nf --help
+# Native installation
+nextflow run main.nf --help
 ```
 
 ## Quick Start
 
-### Minimal Example
+### Step 1: Prepare Sample Sheet
 
-```bash
-nextflow run main_full.nf \
-    --sample_sheet samples.tsv \
-    --outdir results
+Create a tab-separated file (e.g., `samples.tsv`):
+
+```tsv
+sample	strain	type	read1	read2
+sample1	C57BL_6J	fastq	/data/sample1_R1.fq.gz	/data/sample1_R2.fq.gz
+sample2	C57BL_6J	fastq	/data/sample2_R1.fq.gz	/data/sample2_R2.fq.gz
 ```
 
-### Complete Example with Options
+### Step 2: Run Pipeline
+
+#### Minimal Example (Local)
 
 ```bash
-nextflow run main_full.nf \
+nextflow run main.nf \
+    --sample_sheet samples.tsv \
+    --outdir results \
+    -bg &> results.log
+```
+
+#### With Singularity Container
+
+```bash
+nextflow run main.nf \
+    -profile singularity \
+    --singularity_path /path/to/conterminator.sif \
+    --sample_sheet samples.tsv \
+    --outdir results \
+    -bg &> results.log
+```
+
+#### On SLURM Cluster with Singularity (Recommended)
+
+```bash
+nextflow run main.nf \
+    -profile slurm,singularity \
+    --singularity_path /path/to/conterminator.sif \
+    --sample_sheet samples.tsv \
+    --outdir results \
+    --max_parallel_samples 10 \
+    -bg &> results.log
+```
+
+#### Complete Example with Performance Tuning
+
+```bash
+nextflow run main.nf \
+    -profile slurm,singularity \
+    --singularity_path /path/to/conterminator.sif \
     --sample_sheet samples.tsv \
     --outdir results_full \
     --subset_for_fastq_qc true \
     --subset_fastq_qc_reads 100000 \
     --subset_bam_for_qc true \
     --bam_qc_subset_mapped 200000 \
-    --max_parallel_samples 4
+    --max_parallel_samples 10 \
+    -bg &> results.log
 ```
 
 ## Input Format
 
 ### Sample Sheet (Required)
 
-Create a tab-separated file (`samples.tsv`) with the following format:
+The pipeline requires a **tab-separated** sample sheet file specifying samples, input types, and file paths.
+
+#### Format Specification
+
+Create a TSV file (e.g., `samples.tsv`) with **5 columns**:
 
 ```tsv
-sample	strain	path
-sample1	C57BL_6J	/data/fastq/sample1/
-sample2	DBA_2J	/data/fastq/sample2/
-sample3	C57BL_6J	/data/fastq/sample3/
+sample	strain	type	read1	read2
+sample1	C57BL_6J	fastq	/path/to/sample1_R1.fastq.gz	/path/to/sample1_R2.fastq.gz
+sample2	C57BL_6J	bam	/path/to/sample2.bam
+sample3	DBA_2J	unmapped_fastq	/path/to/sample3_unmapped_R1.fastq.gz	/path/to/sample3_unmapped_R2.fastq.gz
+sample4		fastq	/path/to/sample4_R1.fastq.gz	/path/to/sample4_R2.fastq.gz
+sample5		bam	/path/to/sample5.bam
 ```
 
-**Requirements:**
-- Header row is mandatory
-- Three columns: `sample`, `strain`, `path`
-- `sample`: Unique sample identifier
-- `strain`: Reference strain name (must exist in `strains_base_dir`)
-- `path`: Directory containing paired-end FASTQ files
+#### Column Descriptions
 
-**Supported FASTQ naming patterns:**
-- `*_{1,2}.fq.gz` / `*_{1,2}.fastq.gz`
-- `*_{R1,R2}.fq.gz` / `*_{R1,R2}.fastq.gz`
-- Pattern auto-detection or specify with `--fastq_pattern`
+| Column | Required | Description | Values/Examples |
+|--------|----------|-------------|-----------------|
+| **sample** | Yes | Unique sample identifier | `sample1`, `exp_001`, `ctrl-A` |
+| **strain** | No | Reference strain name (defaults to `GRCm39` if empty) | `C57BL_6J`, `DBA_2J`, `BALB_cJ`, or leave empty |
+| **type** | Yes | Input data type | `fastq`, `bam`, or `unmapped_fastq` |
+| **read1** | Yes | Path to first read file or BAM file | `/path/to/sample_R1.fastq.gz` or `/path/to/sample.bam` |
+| **read2** | Conditional | Path to second read file (required for `fastq` and `unmapped_fastq`, empty for `bam`) | `/path/to/sample_R2.fastq.gz` or empty |
+
+#### Input Type Definitions
+
+| Type | Description | Use Case | Required Columns |
+|------|-------------|----------|------------------|
+| **fastq** | Paired-end FASTQ files for alignment | Raw sequencing data to be aligned with STAR | `read1`, `read2` |
+| **bam** | Pre-aligned BAM file | Already aligned data, skip STAR alignment | `read1` only |
+| **unmapped_fastq** | Unmapped reads in FASTQ format | Already extracted unmapped reads for contamination analysis | `read1`, `read2` |
+
+#### Requirements and Rules
+
+1. **Header row is mandatory** - First line must be: `sample	strain	type	read1	read2`
+2. **Tab-separated format** - Columns must be separated by tabs (not spaces)
+3. **Five columns required** - All 5 columns must be present in header
+4. **Unique sample IDs** - Each sample name must be unique across the sheet
+5. **Valid type values** - Type must be one of: `fastq`, `bam`, or `unmapped_fastq`
+6. **Strain handling**:
+   - If strain is empty or not specified, defaults to `GRCm39`
+   - If strain is specified, it must exist in `params.strains_base_dir`
+7. **read2 rules**:
+   - For `type=fastq`: read2 is **required** (paired-end reads)
+   - For `type=unmapped_fastq`: read2 is **required** (paired-end reads)
+   - For `type=bam`: read2 must be **empty** (BAM files don't have separate read files)
+8. **File paths** - All file paths in `read1` and `read2` must exist and be accessible
+
+#### Comprehensive Examples
+
+**Example 1: Mixed input types**
+```tsv
+sample	strain	type	read1	read2
+WT_rep1	C57BL_6J	fastq	/data/exp1/WT_rep1_R1.fq.gz	/data/exp1/WT_rep1_R2.fq.gz
+WT_rep2	C57BL_6J	fastq	/data/exp1/WT_rep2_R1.fq.gz	/data/exp1/WT_rep2_R2.fq.gz
+KO_rep1	DBA_2J	bam	/data/exp1/KO_rep1_aligned.bam
+archived_sample		bam	/archive/old_alignment.bam
+contaminated_sample	BALB_cJ	unmapped_fastq	/data/unmapped/sample_R1.fq.gz	/data/unmapped/sample_R2.fq.gz
+```
+
+**Example 2: All FASTQ inputs (standard RNA-seq workflow)**
+```tsv
+sample	strain	type	read1	read2
+ctrl_1	C57BL_6J	fastq	/mnt/data/ctrl_1_R1.fastq.gz	/mnt/data/ctrl_1_R2.fastq.gz
+ctrl_2	C57BL_6J	fastq	/mnt/data/ctrl_2_R1.fastq.gz	/mnt/data/ctrl_2_R2.fastq.gz
+treat_1	C57BL_6J	fastq	/mnt/data/treat_1_R1.fastq.gz	/mnt/data/treat_1_R2.fastq.gz
+treat_2	C57BL_6J	fastq	/mnt/data/treat_2_R1.fastq.gz	/mnt/data/treat_2_R2.fastq.gz
+```
+
+**Example 3: Pre-aligned BAM files (QC only)**
+```tsv
+sample	strain	type	read1	read2
+sample1	C57BL_6J	bam	/alignments/sample1.bam
+sample2	DBA_2J	bam	/alignments/sample2.bam
+sample3		bam	/alignments/sample3.bam
+```
+
+**Example 4: Using default strain (GRCm39)**
+```tsv
+sample	strain	type	read1	read2
+exp001		fastq	/data/exp001_R1.fq.gz	/data/exp001_R2.fq.gz
+exp002		fastq	/data/exp002_R1.fq.gz	/data/exp002_R2.fq.gz
+exp003		bam	/data/exp003.bam
+```
+
+#### Strain Reference Requirements
+
+For each strain specified in the sample sheet (or the default `GRCm39`), the following files must exist in `params.strains_base_dir`:
+
+```
+strains_base_dir/
+└── STRAIN_NAME/
+    ├── *pseudogenome__strain_STRAIN_NAME.fa.gz    # FASTA reference
+    └── *pseudogenome__strain_STRAIN_NAME.gtf.gz   # Gene annotations
+```
+
+**Example for C57BL_6J strain:**
+```
+/path/to/strains_base_dir/C57BL_6J/
+├── mm39_pseudogenome__strain_C57BL_6J.fa.gz
+└── mm39_pseudogenome__strain_C57BL_6J.gtf.gz
+```
+
+**Example for default GRCm39 strain:**
+```
+/path/to/strains_base_dir/GRCm39/
+├── GRCm39.genome.fa.gz
+└── gencode.vM35.primary_assembly.annotation.gtf.gz
+```
 
 ## Usage
-
-### Basic Commands
-
-```bash
-# Show help
-nextflow run main_full.nf --help
-
-# Run with defaults
-nextflow run main_full.nf --sample_sheet samples.tsv
-
-# Resume failed run
-nextflow run main_full.nf --sample_sheet samples.tsv -resume
-
-# Run with specific profile
-nextflow run main_full.nf --sample_sheet samples.tsv -profile cluster
-```
 
 ### Key Parameters
 
 #### Input/Output
 ```bash
---sample_sheet <file>      # Sample sheet with strain assignments (required)
+--sample_sheet <file>      # Sample sheet with 5 columns: sample, strain, type, read1, read2 (required)
 --outdir <path>            # Output directory (default: results)
---fastq_pattern <pattern>  # FASTQ file pattern (auto-detected)
 ```
 
 #### Subsampling (Performance Tuning)
@@ -270,6 +407,8 @@ results/
 ├── Temporary/
 │   ├── decontaminer/           # Intermediate files
 │   └── star_alignment/         # STAR outputs
+├── NextflowReports/            # Internal reports by Nextflow
+├── pid.txt                     # Contains Nextflow PIDs
 └── pipeline_info.txt           # Run metadata
 ```
 
@@ -305,34 +444,59 @@ results/
 --unmapped_subset_reads 50000
 ```
 
-### Resume Failed Runs
+### Nextflow tips
+
+#### Resuming failed runs
+
+If your run has failed due to an error, you can resume it after fixing the problem by running the following:
 
 ```bash
-# Nextflow automatically caches completed tasks
-nextflow run main_full.nf --sample_sheet samples.tsv -resume
+# Get all the runs launched by nextflow
+nextflow log
+
+# Copy the session id of the run you want to resume. It looks like this: 2b29d621-8eff-400c-83a2-05146c4f6131
+
+# Resume your pipeline by using exactly the same command as before but by adding -resume [session id]
+# For example, if your command was
+nextflow run main.nf --outdir myresults --sample_sheet samples.tsv -profile singularity,slurm
+# It will become
+nextflow run main.nf --outdir myresults --sample_sheet samples.tsv -profile singularity,slurm -resume 2b29d621-8eff-400c-83a2-05146c4f6131
 ```
 
-### Check Pipeline Version
+#### Run Nextflow in the background
+
+You can simply run nextflow in the background using `-bg`:
 
 ```bash
-nextflow run main_full.nf --version
+nextflow run main.nf --outdir myresults --sample_sheet samples.tsv -profile singularity,slurm -bg &> myrun.log
 ```
 
-## Execution Profiles
+#### Stopping background run
 
-The pipeline supports multiple execution profiles (configure in `nextflow.config`):
+You can find the latest running pid in the `pid.txt` in the root of output directory.
 
 ```bash
-# Local execution
-nextflow run main_full.nf -profile local
+cat pid.txt
+# ---------------------
+# 4149804
+# nextflow run main.nf --sample_sheet input_test/sample_sheet.tsv --outdir results_test --singularity_path /mnt/sas/Users/abadreddine/Projects/Conterminator/conterminator.sif -profile singularity -resume 2b29d621-8eff-400c-83a2-05146c4f6131
+# Start: 07-Nov-2025 01:25:30
 
-# With Singularity (not ready yet)
-nextflow run main_full.nf -profile singularity
+# Then you can use the PID number to kill the running job
+kill 4149804
 ```
 
-## To do
+#### Cleaning the work directory
 
-- Create the singularity image.
+Nextflow works by running his processes in a folder called `work` in your current path. The `work` directory is important to resume your jobs. If this folder gets deleted, you cannot resume your jobs anymore.
+
+However, once your analysis has finished, you can clean your working directory by running:
+
+```bash
+rm -rf work .nextflow.log*
+# OR 
+nextflow clean -f $(nextflow log -q)
+```
 
 ## Contact
 
@@ -345,5 +509,20 @@ For bug reports and feature requests, please open an issue on GitLab.
 ---
 
 ## Version History
+
+- **v1.1** (November 2025) - Major updates:
+  - Full Singularity container support with all tools bundled
+  - SLURM cluster execution with job scheduling
+  - Per-process resource configuration with automatic retry on OOM
+  - Dynamic memory scaling (2×/3× on retry)
+  - Parallelization control with `maxForks` parameter
+  - Enhanced error handling with intelligent retry strategy
+  - Singularity information in pipeline reports
+  - Improved channel scoping for complex workflows
+  - New flexible sample sheet format supporting multiple input types:
+  - Direct FASTQ file paths (no directory scanning required)
+  - Pre-aligned BAM files for QC-only workflows
+  - Unmapped FASTQ files for contamination-only analysis
+  - Optional strain specification with GRCm39 default
 
 - **v1.0** (2025) - Initial release with full QC and contamination detection suite
