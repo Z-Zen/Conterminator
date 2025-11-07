@@ -85,7 +85,36 @@ git clone https://gitlab.epfl.ch/abadreddine/conterminator.git
 cd conterminator
 ```
 
-### Configure Tool Paths
+### Tools
+
+#### Option 1: download pre-built tools container (Recommended)
+
+The container includes all required bioinformatics tools pre-configured.
+
+```bash
+# Download from Google Drive
+pip install gdown
+gdown 1a2CevfBkMUjSt5R4AnQyDX4ofAHBZmfZ
+
+# Test the build
+singularity test conterminator_v1.1.sif
+```
+
+#### Option 2: build Singularity container (requires sudo)
+
+Build the Singularity container with all dependencies bundled:
+
+```bash
+# Build the container
+sudo singularity build conterminator_v1.1.sif conterminator.def
+
+# Test the build
+singularity test conterminator_v1.1.sif
+```
+
+#### Option 3: native installation 
+
+Install all required tools manually and configure paths in `nextflow.config`.
 
 Edit `nextflow.config` to specify paths to installed tools and reference data:
 
@@ -104,36 +133,7 @@ params {
 }
 ```
 
-### Option 1: download pre-built container (Recommended)
-
-The container includes all required bioinformatics tools pre-configured.
-
-```bash
-# Download from Google Drive
-pip install gdown
-gdown 1a2CevfBkMUjSt5R4AnQyDX4ofAHBZmfZ
-
-# Test the build
-singularity test conterminator_v1.1.sif
-```
-
-### Option 2: build Singularity container
-
-Build the Singularity container with all dependencies bundled:
-
-```bash
-# Build the container (requires sudo)
-sudo singularity build conterminator_v1.1.sif conterminator.def
-
-# Test the build
-singularity test conterminator_v1.1.sif
-```
-
-### Option 3: native installation
-
-Install all required tools manually and configure paths in `nextflow.config`.
-
-### Test Installation
+#### Test Installation
 
 ```bash
 # Native installation
