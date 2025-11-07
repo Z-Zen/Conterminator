@@ -104,29 +104,46 @@ params {
 }
 ```
 
-### Option 1: Native Installation
+### Option 1: download pre-built container (Recommended)
 
-Install all required tools manually and configure paths in `nextflow.config`.
+The container includes all required bioinformatics tools pre-configured.
 
-### Option 2: Singularity Container (Recommended)
+```bash
+# Download from Google Drive
+pip install gdown
+gdown 1a2CevfBkMUjSt5R4AnQyDX4ofAHBZmfZ
+
+# Test the build
+singularity test conterminator_v1.1.sif
+```
+
+### Option 2: build Singularity container
 
 Build the Singularity container with all dependencies bundled:
 
 ```bash
 # Build the container (requires sudo)
-sudo singularity build conterminator.sif conterminator.def
+sudo singularity build conterminator_v1.1.sif conterminator.def
 
 # Test the build
-singularity test conterminator.sif
+singularity test conterminator_v1.1.sif
 ```
 
-The container includes all required bioinformatics tools pre-configured.
+### Option 3: native installation
+
+Install all required tools manually and configure paths in `nextflow.config`.
 
 ### Test Installation
 
 ```bash
 # Native installation
 nextflow run main.nf --help
+
+# With Singularity
+nextflow run main.nf --singularity_path /path/to/conterminator_v1.1.sif -profile singularity --help
+
+# With Singularity + Slurm
+nextflow run main.nf --singularity_path /path/to/conterminator_v1.1.sif -profile singularity,slurm --help
 ```
 
 ## Quick Start
@@ -157,7 +174,7 @@ nextflow run main.nf \
 ```bash
 nextflow run main.nf \
     -profile singularity \
-    --singularity_path /path/to/conterminator.sif \
+    --singularity_path /path/to/conterminator_v1.1.sif \
     --sample_sheet samples.tsv \
     --outdir results \
     -bg &> results.log
@@ -168,7 +185,7 @@ nextflow run main.nf \
 ```bash
 nextflow run main.nf \
     -profile slurm,singularity \
-    --singularity_path /path/to/conterminator.sif \
+    --singularity_path /path/to/conterminator_v1.1.sif \
     --sample_sheet samples.tsv \
     --outdir results \
     --max_parallel_samples 10 \
@@ -180,7 +197,7 @@ nextflow run main.nf \
 ```bash
 nextflow run main.nf \
     -profile slurm,singularity \
-    --singularity_path /path/to/conterminator.sif \
+    --singularity_path /path/to/conterminator_v1.1.sif \
     --sample_sheet samples.tsv \
     --outdir results_full \
     --subset_for_fastq_qc true \
@@ -479,7 +496,7 @@ You can find the latest running pid in the `pid.txt` in the root of output direc
 cat pid.txt
 # ---------------------
 # 4149804
-# nextflow run main.nf --sample_sheet input_test/sample_sheet.tsv --outdir results_test --singularity_path /mnt/sas/Users/abadreddine/Projects/Conterminator/conterminator.sif -profile singularity -resume 2b29d621-8eff-400c-83a2-05146c4f6131
+# nextflow run main.nf --sample_sheet input_test/sample_sheet.tsv --outdir results_test --singularity_path /mnt/sas/Users/abadreddine/Projects/Conterminator/conterminator_v1.1.sif -profile singularity -resume 2b29d621-8eff-400c-83a2-05146c4f6131
 # Start: 07-Nov-2025 01:25:30
 
 # Then you can use the PID number to kill the running job
