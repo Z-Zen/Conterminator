@@ -24,6 +24,7 @@ params.run_star_alignment       = true
 params.star_threads             = 20
 params.strain                   = null
 params.strains_base_dir         = "/home/abadreddine/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes"
+params.standard_references_dir  = "/mnt/sas/Data/References/Mus"  // For standard reference genomes like GRCm39, GRCm38
 params.star_index_dir           = "/mnt/sas/Data/References/Mus"
 params.star_index_threads       = 20
 params.star_index_mem           = "32 GB"
@@ -58,6 +59,7 @@ params.windowsize         = 500
 params.window_step        = 250
 
 // DecontaMiner settings
+// Use container paths when running with Singularity, host paths otherwise
 params.decontaminer_dir             = "/mnt/sas/Tools/decontaminer-RNAseq/decontaMiner_1.4"
 params.decontaminer_config          = "/mnt/sas/Tools/decontaminer-RNAseq/decontaMiner_1.4/config_files/configure.txt"
 params.decontaminer_pairing         = "P"
@@ -203,9 +205,11 @@ def helpMessage() {
                                   Examples: "*_{1,2}.fq.gz", "*_{R1,R2}.fastq.gz"
     
     REFERENCE FILES:
-      --strains_base_dir <path>   Directory with strain-specific references
-                                  (default: /home/abadreddine/.../HDP_pseudogenomes)
-      --star_index_dir <path>     Directory for STAR indices (default: /mnt/sas/Data/References/Mus)
+      --strains_base_dir <path>        Directory with strain-specific pseudogenomes
+                                       (default: /home/abadreddine/.../HDP_pseudogenomes)
+      --standard_references_dir <path> Directory with standard reference genomes (e.g., GRCm39, GRCm38)
+                                       (default: /mnt/sas/Data/References/Mus)
+      --star_index_dir <path>          Directory for STAR indices (default: /mnt/sas/Data/References/Mus)
     
     STAR ALIGNMENT:
       --run_star_alignment        Enable STAR alignment (default: true)
@@ -627,16 +631,30 @@ if (params.sample_sheet && params.run_star_alignment) {
         System.exit(1)
     }
     
-    def invalidStrains = requestedStrains.findAll { !availableStrains.contains(it) }
+    // Validate that each requested strain has a directory in either strains_base_dir or standard_references_dir
+    def invalidStrains = requestedStrains.findAll { strain ->
+        def pseudogenomeDir = new File("${params.strains_base_dir}/${strain}")
+        def standardRefDir = new File("${params.standard_references_dir}/${strain}")
+
+        boolean pseudogenomeExists = pseudogenomeDir.exists() && pseudogenomeDir.isDirectory()
+        boolean standardRefExists = standardRefDir.exists() && standardRefDir.isDirectory()
+
+        return !pseudogenomeExists && !standardRefExists
+    }
+
     if (invalidStrains) {
         println """
         ========================================
         ERROR: Invalid strain(s) specified
         ========================================
-        The following strain(s) are not available:
+        The following strain(s) do not have directories in either location:
         ${invalidStrains.join(', ')}
-        
-        Available strains (${availableStrains.size()}):
+
+        Searched in:
+          1. Strain-specific pseudogenomes: ${params.strains_base_dir}
+          2. Standard reference genomes: ${params.standard_references_dir}
+
+        Available strains in pseudogenomes directory (${availableStrains.size()}):
         ========================================
         ${availableStrains.join('\n        ')}
         ========================================
@@ -676,12 +694,50 @@ if (!params.sample_sheet) {
 // QC tools now use per-strain references from sample sheet
 def need_ref = params.run_deeptools || params.run_picard_gc || params.run_bedtools_gc || params.run_contamination_check || params.run_mapinsights
 
+// Define tool paths based on execution profile
+// When using Singularity, use container paths; otherwise use host paths
+def usingSingularity = workflow.profile.contains('singularity')
+
+// Core alignment tools
+def STAR_BIN = usingSingularity ? "/opt/tools/STAR/bin/STAR" : params.star_bin
+def SAMTOOLS_BIN = usingSingularity ? "/opt/tools/bin/samtools" : params.samtools_bin
+def SEQTK_BIN = usingSingularity ? "/opt/tools/bin/seqtk" : params.seqtk_bin
+
+// QC tools
+def FASTQC_BIN = usingSingularity ? "/opt/tools/bin/fastqc" : params.fastqc_bin
+def FASTQ_SCREEN_BIN = usingSingularity ? "/opt/tools/bin/fastq_screen" : params.fastq_screen
+def QUALIMAP_BIN = usingSingularity ? "/opt/tools/bin/qualimap" : params.qualimap_bin
+
+// Analysis tools
+def BEDTOOLS_BIN = usingSingularity ? "/opt/tools/bin/bedtools" : params.bedtools_bin
+def PICARD_JAR = usingSingularity ? "/opt/tools/picard/picard.jar" : params.picard_jar
+def DEEPTOOLS_GCBIAS = usingSingularity ? "computeGCBias" : params.deeptools_gcbias
+def BLASTN_BIN = usingSingularity ? "/opt/tools/blast/bin/blastn" : params.blastn_bin
+
+// UCSC tools
+def FACOUNT_BIN = usingSingularity ? "/opt/tools/bin/faCount" : params.facount_bin
+def FA2BIT_BIN = usingSingularity ? "/opt/tools/bin/faToTwoBit" : params.fa2bit_bin
+
+// Other tools
+def REFORMAT_BIN = usingSingularity ? "/opt/tools/bbmap/reformat.sh" : params.reformat_bin
+def MULTIQC_BIN = usingSingularity ? "multiqc" : params.multiqc_bin
+def MAPINSIGHTS_BIN = usingSingularity ? "/opt/tools/bin/mapinsights" : params.mapinsights_bin
+
+// DecontaMiner paths
+def DECONTAMINER_DIR = usingSingularity ? "/opt/tools/decontaminer" : params.decontaminer_dir
+def DECONTAMINER_CONFIG = usingSingularity ? "/opt/tools/decontaminer/config_files/configure.txt" : params.decontaminer_config
+
+if (usingSingularity) {
+    println "INFO: Using Singularity - Tool paths configured for container execution"
+}
+
 if (params.run_decontaminer) {
-    if (!params.decontaminer_config) {
+    if (!DECONTAMINER_CONFIG) {
         exit 1, "ERROR: DecontaMiner requires --decontaminer_config"
     }
-    if (!file(params.decontaminer_config).exists()) {
-        exit 1, "ERROR: DecontaMiner config file not found: ${params.decontaminer_config}"
+    // Skip file existence check when using Singularity (file is inside container)
+    if (!usingSingularity && !file(DECONTAMINER_CONFIG).exists()) {
+        exit 1, "ERROR: DecontaMiner config file not found: ${DECONTAMINER_CONFIG}"
     }
 }
 
@@ -707,8 +763,16 @@ Unmapped Decon Subset:   ${params.subset_unmapped_for_decontaminer} (${params.un
 process WRITE_PIPELINE_INFO {
     publishDir "${params.outdir}/", mode: 'copy'
 
+    input:
+    path main_script, stageAs: "main_script_copy.nf"
+    path nextflow_config, stageAs: "nextflow_config_copy.config"
+    path singularity_def, stageAs: "singularity_def_copy.def"
+
     output:
     path "pipeline_info.txt"
+    path "main.nf"
+    path "nextflow.config"
+    path "conterminator.def"
 
     script:
     """
@@ -770,8 +834,18 @@ BAM QC:       ${params.subset_bam_for_qc} (${params.bam_qc_subset_mapped} reads)
 Mapped BLAST: ${params.subset_mapped_for_blast} (${params.mapped_subset_reads} reads)
 Unmapped BLAST: ${params.subset_unmapped_for_blast} (${params.unmapped_subset_reads} reads)
 
+Pipeline Files:
+---------------
+Copies of main.nf, nextflow.config, and conterminator.def are saved
+alongside this file for reproducibility.
+
 ========================================
 EOF
+
+    # Copy pipeline configuration files
+    cp main_script_copy.nf main.nf
+    cp nextflow_config_copy.config nextflow.config
+    cp singularity_def_copy.def conterminator.def
     """
 }
 
@@ -821,8 +895,8 @@ process SUBSET_FASTQ_FOR_QC {
     echo "Original reads R1: \$ORIG_READS_R1" >> ${sample}_subsample_stats.txt
     echo "Original reads R2: \$ORIG_READS_R2" >> ${sample}_subsample_stats.txt
     
-    ${params.seqtk_bin} sample -s${params.subset_seed} ${fastq1} ${params.subset_fastq_qc_reads} | gzip > ${sample}_subsampled_1.fastq.gz
-    ${params.seqtk_bin} sample -s${params.subset_seed} ${fastq2} ${params.subset_fastq_qc_reads} | gzip > ${sample}_subsampled_2.fastq.gz
+    ${SEQTK_BIN} sample -s${params.subset_seed} ${fastq1} ${params.subset_fastq_qc_reads} | gzip > ${sample}_subsampled_1.fastq.gz
+    ${SEQTK_BIN} sample -s${params.subset_seed} ${fastq2} ${params.subset_fastq_qc_reads} | gzip > ${sample}_subsampled_2.fastq.gz
     
     SUB_READS_R1=\$(zcat ${sample}_subsampled_1.fastq.gz | wc -l | awk '{print \$1/4}')
     SUB_READS_R2=\$(zcat ${sample}_subsampled_2.fastq.gz | wc -l | awk '{print \$1/4}')
@@ -863,8 +937,8 @@ process SUBSET_FASTQ_FOR_STAR {
     echo "Original reads R1: \$ORIG_READS_R1" >> ${sample}_star_subsample_stats.txt
     echo "Original reads R2: \$ORIG_READS_R2" >> ${sample}_star_subsample_stats.txt
     
-    ${params.seqtk_bin} sample -s${params.subset_seed} ${fastq1} ${params.subset_star_reads} | gzip > ${sample}_star_subsampled_1.fastq.gz
-    ${params.seqtk_bin} sample -s${params.subset_seed} ${fastq2} ${params.subset_star_reads} | gzip > ${sample}_star_subsampled_2.fastq.gz
+    ${SEQTK_BIN} sample -s${params.subset_seed} ${fastq1} ${params.subset_star_reads} | gzip > ${sample}_star_subsampled_1.fastq.gz
+    ${SEQTK_BIN} sample -s${params.subset_seed} ${fastq2} ${params.subset_star_reads} | gzip > ${sample}_star_subsampled_2.fastq.gz
     
     SUB_READS_R1=\$(zcat ${sample}_star_subsampled_1.fastq.gz | wc -l | awk '{print \$1/4}')
     SUB_READS_R2=\$(zcat ${sample}_star_subsampled_2.fastq.gz | wc -l | awk '{print \$1/4}')
@@ -878,7 +952,7 @@ process SUBSET_FASTQ_FOR_STAR {
 process PREPARE_STRAIN_REFERENCE {
     tag "${strain}"
     publishDir "${params.star_index_dir}", mode: 'copy', pattern: "${strain}"
-    
+
     input:
     val strain
 
@@ -888,24 +962,63 @@ process PREPARE_STRAIN_REFERENCE {
     script:
     """
     set -euo pipefail
-    
-    STRAIN_DIR="${params.strains_base_dir}/${strain}"
-    
-    FASTA=\$(find "\${STRAIN_DIR}" -name "*pseudogenome__strain_${strain}.fa.gz" | head -1)
+
+    # Check both possible locations for the strain
+    PSEUDOGENOME_DIR="${params.strains_base_dir}/${strain}"
+    STANDARD_REF_DIR="${params.standard_references_dir}/${strain}"
+
+    # Determine which directory to use
+    if [ -d "\${PSEUDOGENOME_DIR}" ]; then
+        STRAIN_DIR="\${PSEUDOGENOME_DIR}"
+        echo "INFO: Using strain-specific pseudogenome directory: \${STRAIN_DIR}" >&2
+    elif [ -d "\${STANDARD_REF_DIR}" ]; then
+        STRAIN_DIR="\${STANDARD_REF_DIR}"
+        echo "INFO: Using standard reference directory: \${STRAIN_DIR}" >&2
+    else
+        echo "ERROR: Could not find directory for ${strain}" >&2
+        echo "Searched in:" >&2
+        echo "  - \${PSEUDOGENOME_DIR}" >&2
+        echo "  - \${STANDARD_REF_DIR}" >&2
+        exit 1
+    fi
+
+    # First, try to find strain-specific pseudogenome files
+    FASTA=\$(find "\${STRAIN_DIR}" -name "*pseudogenome__strain_${strain}.fa.gz" 2>/dev/null | head -1)
+
+    # If not found, look for any FASTA file
     if [ -z "\${FASTA}" ]; then
-        echo "ERROR: Could not find pseudogenome fasta for ${strain}" >&2
+        echo "INFO: Strain-specific pseudogenome not found, searching for standard reference genome..." >&2
+        FASTA=\$(find "\${STRAIN_DIR}" -type f \\( -name "*.fa.gz" -o -name "*.fasta.gz" -o -name "*.genome.fa.gz" \\) 2>/dev/null | head -1)
+    fi
+
+    if [ -z "\${FASTA}" ]; then
+        echo "ERROR: Could not find FASTA file for ${strain} in \${STRAIN_DIR}" >&2
+        echo "Searched for:" >&2
+        echo "  - *pseudogenome__strain_${strain}.fa.gz" >&2
+        echo "  - *.fa.gz, *.fasta.gz, *.genome.fa.gz" >&2
         exit 1
     fi
-    
-    GTF=\$(find "\${STRAIN_DIR}" -name "*pseudogenome__strain_${strain}.gtf.gz" | head -1)
+
+    # First, try to find strain-specific GTF
+    GTF=\$(find "\${STRAIN_DIR}" -name "*pseudogenome__strain_${strain}.gtf.gz" 2>/dev/null | head -1)
+
+    # If not found, look for any GTF file
     if [ -z "\${GTF}" ]; then
-        echo "ERROR: Could not find GTF for ${strain}" >&2
+        echo "INFO: Strain-specific GTF not found, searching for standard annotation..." >&2
+        GTF=\$(find "\${STRAIN_DIR}" -type f \\( -name "*.gtf.gz" -o -name "*.gff.gz" -o -name "*.gff3.gz" \\) 2>/dev/null | head -1)
+    fi
+
+    if [ -z "\${GTF}" ]; then
+        echo "ERROR: Could not find GTF/GFF file for ${strain} in \${STRAIN_DIR}" >&2
+        echo "Searched for:" >&2
+        echo "  - *pseudogenome__strain_${strain}.gtf.gz" >&2
+        echo "  - *.gtf.gz, *.gff.gz, *.gff3.gz" >&2
         exit 1
     fi
-    
+
     ln -s "\${FASTA}" ${strain}_genome.fa.gz
     ln -s "\${GTF}" ${strain}_annotation.gtf.gz
-    
+
     echo "Prepared references for ${strain}"
     echo "FASTA: \${FASTA}"
     echo "GTF: \${GTF}"
@@ -945,7 +1058,7 @@ process BUILD_STAR_INDEX {
         GTF_FILE="${gtf}"
     fi
     
-    ${params.star_bin} \\
+    ${STAR_BIN} \\
         --runMode genomeGenerate \\
         --runThreadN ${task.cpus} \\
         --genomeDir ${strain} \\
@@ -989,7 +1102,7 @@ process STAR_ALIGN {
     echo "Threads: ${task.cpus}" >> ${sample}_${strain}_star_alignment_stats.txt
     echo "" >> ${sample}_${strain}_star_alignment_stats.txt
     
-    ${params.star_bin} \\
+    ${STAR_BIN} \\
         --runThreadN ${task.cpus} \\
         --genomeDir ${genome_dir} \\
         --quantMode GeneCounts TranscriptomeSAM \\
@@ -999,7 +1112,7 @@ process STAR_ALIGN {
         --outFileNamePrefix ${sample}_${strain}_ \\
         --outReadsUnmapped Fastx
     
-    ${params.samtools_bin} index -@ ${task.cpus} ${sample}_${strain}_Aligned.sortedByCoord.out.bam
+    ${SAMTOOLS_BIN} index -@ ${task.cpus} ${sample}_${strain}_Aligned.sortedByCoord.out.bam
 
     echo "" >> ${sample}_${strain}_star_alignment_stats.txt
     echo "ALIGNMENT SUMMARY:" >> ${sample}_${strain}_star_alignment_stats.txt
@@ -1028,22 +1141,22 @@ process PREP_STRAIN_REFERENCE_FOR_QC {
     zcat ${fasta_gz} > ${strain}.fa
 
     # Create fasta index
-    ${params.samtools_bin} faidx -@ ${task.cpus} ${strain}.fa
+    ${SAMTOOLS_BIN} faidx -@ ${task.cpus} ${strain}.fa
 
     # Create sequence dictionary
-    ${params.samtools_bin} dict ${strain}.fa > ${strain}.dict
+    ${SAMTOOLS_BIN} dict ${strain}.fa > ${strain}.dict
 
     # Create BED file from fai
     awk 'BEGIN{OFS="\\t"} {print \$1, 0, \$2}' ${strain}.fa.fai > ${strain}.bed
 
     # Calculate effective genome size
-    ${params.facount_bin} ${strain}.fa > ${strain}.facount.txt
+    ${FACOUNT_BIN} ${strain}.fa > ${strain}.facount.txt
     awk 'BEGIN{len=0; n=0} \$1=="total"{len=\$2; n=\$7} END{print len-n}' ${strain}.facount.txt > ${strain}_effective_size.txt
     echo "Effective genome size for ${strain}: \$(cat ${strain}_effective_size.txt)" >&2
 
     # Create 2bit file if deeptools is enabled
     if [[ "${params.run_deeptools}" == "true" ]]; then
-        ${params.fa2bit_bin} ${strain}.fa ${strain}.2bit
+        ${FA2BIT_BIN} ${strain}.fa ${strain}.2bit
     else
         # Create empty placeholder
         touch ${strain}.2bit
@@ -1065,7 +1178,7 @@ process INDEX_INPUT_BAM {
 
     script:
     """
-    ${params.samtools_bin} index -@ ${task.cpus} ${bam}
+    ${SAMTOOLS_BIN} index -@ ${task.cpus} ${bam}
     """
 }
 
@@ -1093,7 +1206,7 @@ process SUBSET_BAM_FOR_QC {
     echo "" >> ${sample}_${strain}_bam_subset_stats.txt
     
     # Count total mapped reads
-    TOTAL_MAPPED=\$(${params.samtools_bin} view -@ ${task.cpus} -c -F 4 ${bam})
+    TOTAL_MAPPED=\$(${SAMTOOLS_BIN} view -@ ${task.cpus} -c -F 4 ${bam})
     echo "Total mapped reads: \$TOTAL_MAPPED" >> ${sample}_${strain}_bam_subset_stats.txt
 
     if [ "\$TOTAL_MAPPED" -gt "${params.bam_qc_subset_mapped}" ]; then
@@ -1102,22 +1215,22 @@ process SUBSET_BAM_FOR_QC {
         echo "Sampling fraction: \$FRACTION" >> ${sample}_${strain}_bam_subset_stats.txt
         
         # Subsample mapped reads only
-        ${params.samtools_bin} view -@ ${task.cpus} -b -s \${FRACTION} -F 4 ${bam} > temp_mapped.bam
+        ${SAMTOOLS_BIN} view -@ ${task.cpus} -b -s \${FRACTION} -F 4 ${bam} > temp_mapped.bam
         
         # Verify actual count
-        ACTUAL_SAMPLED=\$(${params.samtools_bin} view -@ ${task.cpus} -c temp_mapped.bam)
+        ACTUAL_SAMPLED=\$(${SAMTOOLS_BIN} view -@ ${task.cpus} -c temp_mapped.bam)
         echo "Actually sampled: \$ACTUAL_SAMPLED reads" >> ${sample}_${strain}_bam_subset_stats.txt
     else
         echo "Using all mapped reads (total: \$TOTAL_MAPPED < target: ${params.bam_qc_subset_mapped})" >> ${sample}_${strain}_bam_subset_stats.txt
-        ${params.samtools_bin} view -@ ${task.cpus} -b -F 4 ${bam} > temp_mapped.bam
+        ${SAMTOOLS_BIN} view -@ ${task.cpus} -b -F 4 ${bam} > temp_mapped.bam
     fi
     
     # Sort and index
-    ${params.samtools_bin} sort -@ ${task.cpus} -o ${sample}_${strain}_subset.bam temp_mapped.bam
-    ${params.samtools_bin} index -@ ${task.cpus} ${sample}_${strain}_subset.bam
+    ${SAMTOOLS_BIN} sort -@ ${task.cpus} -o ${sample}_${strain}_subset.bam temp_mapped.bam
+    ${SAMTOOLS_BIN} index -@ ${task.cpus} ${sample}_${strain}_subset.bam
     
     # Report final count
-    SUBSET_COUNT=\$(${params.samtools_bin} view -@ ${task.cpus} -c ${sample}_${strain}_subset.bam)
+    SUBSET_COUNT=\$(${SAMTOOLS_BIN} view -@ ${task.cpus} -c ${sample}_${strain}_subset.bam)
     echo "Subsampled reads: \$SUBSET_COUNT" >> ${sample}_${strain}_bam_subset_stats.txt
     echo "Purpose: QC tools (DeepTools, Picard, BEDTools, Qualimap, Mapinsights)" >> ${sample}_${strain}_bam_subset_stats.txt
     
@@ -1156,7 +1269,7 @@ process SUBSET_UNMAPPED_FOR_BLAST {
     
     # Subsample R1
     if [ "\$TOTAL_R1" -gt "${params.unmapped_subset_reads}" ]; then
-        ${params.seqtk_bin} sample -s${params.subset_seed} ${unmapped_r1} ${params.unmapped_subset_reads} | gzip > ${sample}_${strain}_unmapped_blast_R1.fastq.gz
+        ${SEQTK_BIN} sample -s${params.subset_seed} ${unmapped_r1} ${params.unmapped_subset_reads} | gzip > ${sample}_${strain}_unmapped_blast_R1.fastq.gz
         echo "R1 subsampled to ${params.unmapped_subset_reads} reads" >> ${sample}_${strain}_unmapped_blast_subset_stats.txt
     else
         cat ${unmapped_r1} | gzip > ${sample}_${strain}_unmapped_blast_R1.fastq.gz
@@ -1165,7 +1278,7 @@ process SUBSET_UNMAPPED_FOR_BLAST {
     
     # Subsample R2
     if [ "\$TOTAL_R2" -gt "${params.unmapped_subset_reads}" ]; then
-        ${params.seqtk_bin} sample -s${params.subset_seed} ${unmapped_r2} ${params.unmapped_subset_reads} | gzip > ${sample}_${strain}_unmapped_blast_R2.fastq.gz
+        ${SEQTK_BIN} sample -s${params.subset_seed} ${unmapped_r2} ${params.unmapped_subset_reads} | gzip > ${sample}_${strain}_unmapped_blast_R2.fastq.gz
         echo "R2 subsampled to ${params.unmapped_subset_reads} reads" >> ${sample}_${strain}_unmapped_blast_subset_stats.txt
     else
         cat ${unmapped_r2} | gzip > ${sample}_${strain}_unmapped_blast_R2.fastq.gz
@@ -1214,7 +1327,7 @@ process SUBSET_UNMAPPED_FOR_DECONTAMINER {
     
     # Subsample and add /1 suffix to R1 reads
     if [ "\$TOTAL_R1" -gt "${params.unmapped_subset_reads}" ]; then
-        ${params.seqtk_bin} sample -s${params.subset_seed} ${unmapped_r1} ${params.unmapped_subset_reads} | \\
+        ${SEQTK_BIN} sample -s${params.subset_seed} ${unmapped_r1} ${params.unmapped_subset_reads} | \\
             sed '1~4 s/\$/\\/1/' > ${sample}_${strain}_unmapped_decon_subset_1.fq
         echo "Subsampled R1 to ${params.unmapped_subset_reads} reads" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
     else
@@ -1224,7 +1337,7 @@ process SUBSET_UNMAPPED_FOR_DECONTAMINER {
     
     # Subsample and add /2 suffix to R2 reads
     if [ "\$TOTAL_R2" -gt "${params.unmapped_subset_reads}" ]; then
-        ${params.seqtk_bin} sample -s${params.subset_seed} ${unmapped_r2} ${params.unmapped_subset_reads} | \\
+        ${SEQTK_BIN} sample -s${params.subset_seed} ${unmapped_r2} ${params.unmapped_subset_reads} | \\
             sed '1~4 s/\$/\\/2/' > ${sample}_${strain}_unmapped_decon_subset_2.fq
         echo "Subsampled R2 to ${params.unmapped_subset_reads} reads" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
     else
@@ -1263,7 +1376,7 @@ process DEEPTOOLS_GC {
     
     EFFECTIVE_SIZE=\$(cat ${effective_size_file})
     
-    python3 ${params.deeptools_gcbias} \\
+    python3 ${DEEPTOOLS_GCBIAS} \\
         --bamfile ${bam} \\
         --genome ${ref2bit} \\
         --effectiveGenomeSize \$EFFECTIVE_SIZE \\
@@ -1296,7 +1409,7 @@ process PICARD_GC_BIAS {
     set -euo pipefail
     export PATH="/opt/R/4.5.1/bin:\$PATH"
 
-    java -jar ${params.picard_jar} CollectGcBiasMetrics \\
+    java -jar ${PICARD_JAR} CollectGcBiasMetrics \\
         I=${bam} \\
         O=${sample}.gc_bias_metrics.txt \\
         SUMMARY_OUTPUT=${sample}.gc_bias_summary.txt \\
@@ -1304,7 +1417,7 @@ process PICARD_GC_BIAS {
         R=${ref} \\
         VALIDATION_STRINGENCY=LENIENT
 
-    java -jar ${params.picard_jar} CollectMultipleMetrics \\
+    java -jar ${PICARD_JAR} CollectMultipleMetrics \\
         I=${bam} \\
         O=${sample}_allmetrics \\
         R=${ref}
@@ -1340,13 +1453,13 @@ process BEDTOOLS_GC_COVERAGE {
 
     export PATH="/opt/R/4.5.1/bin:\$PATH"
 
-    ${params.bedtools_bin} makewindows -b ${genome_bed} -w ${params.windowsize} -s ${params.window_step} > ${sample}.windows.bed
+    ${BEDTOOLS_BIN} makewindows -b ${genome_bed} -w ${params.windowsize} -s ${params.window_step} > ${sample}.windows.bed
 
-    ${params.bedtools_bin} nuc -fi ${ref} -bed ${sample}.windows.bed | \\
+    ${BEDTOOLS_BIN} nuc -fi ${ref} -bed ${sample}.windows.bed | \\
       awk 'BEGIN{OFS="\\t"} NR==1{print "chrom","start","end","pct_at","pct_gc"} NR>1{print \$1,\$2,\$3,\$4,\$5}' \\
       > ${sample}.windows.gc.tsv
 
-    ${params.bedtools_bin} coverage -a ${sample}.windows.bed -b ${bam} -mean | \\
+    ${BEDTOOLS_BIN} coverage -a ${sample}.windows.bed -b ${bam} -mean | \\
       paste ${sample}.windows.gc.tsv - | \\
       awk 'BEGIN{OFS="\\t"} NR==1{print \$0,"mean_coverage"} NR>1{print}' \\
       > ${sample}.gc_coverage.tsv
@@ -1387,7 +1500,7 @@ process QUALIMAP_BAMQC {
         GTF_FILE="${gtf}"
     fi
     
-    ${params.qualimap_bin} bamqc \\
+    ${QUALIMAP_BIN} bamqc \\
         -bam ${bam} \\
         -c \\
         -gd ${params.qualimap_genome} \\
@@ -1431,7 +1544,7 @@ process QUALIMAP_RNASEQ {
         GTF_FILE="${gtf}"
     fi
     
-    ${params.qualimap_bin} rnaseq \\
+    ${QUALIMAP_BIN} rnaseq \\
         --algorithm uniquely-mapped-reads \\
         -bam ${bam} \\
         -gtf \${GTF_FILE} \\
@@ -1441,7 +1554,7 @@ process QUALIMAP_RNASEQ {
         -pe \\
         -s
 
-    ${params.qualimap_bin} rnaseq \\
+    ${QUALIMAP_BIN} rnaseq \\
         --algorithm proportional \\
         -bam ${bam} \\
         -gtf \${GTF_FILE} \\
@@ -1476,17 +1589,17 @@ process MAPINSIGHTS {
 
     mkdir ${sample}_mapinsights
     
-    if [ -f "${params.mapinsights_bin}" ] && [ -x "${params.mapinsights_bin}" ]; then
-        ${params.mapinsights_bin} bamqc \\
+    if [ -f "${MAPINSIGHTS_BIN}" ] && [ -x "${MAPINSIGHTS_BIN}" ]; then
+        ${MAPINSIGHTS_BIN} bamqc \\
             -r ${ref} \\
             -i ${bam} \\
             -o ${sample}_mapinsights \\
             ${params.mapinsights_opts}
     else
         mkdir -p ${sample}_mapinsights
-        ${params.samtools_bin} flagstat -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.flagstat
-        ${params.samtools_bin} stats -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.stats
-        ${params.samtools_bin} idxstats -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.idxstats
+        ${SAMTOOLS_BIN} flagstat -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.flagstat
+        ${SAMTOOLS_BIN} stats -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.stats
+        ${SAMTOOLS_BIN} idxstats -@ ${task.cpus} ${bam} > ${sample}_mapinsights/${sample}.idxstats
     fi
     """
 }
@@ -1509,7 +1622,7 @@ process FASTQ_SCREEN {
     script:
     """
     set -euo pipefail
-    ${params.fastq_screen} \\
+    ${FASTQ_SCREEN_BIN} \\
         --conf ${params.fastq_screen_conf} \\
         --threads ${task.cpus} \\
         --outdir . \\
@@ -1535,7 +1648,7 @@ process FASTQC_INPUT_FASTQ {
     """
     set -euo pipefail
     
-    ${params.fastqc_bin} \\
+    ${FASTQC_BIN} \\
         --outdir . \\
         --threads ${task.cpus} \\
         ${fastq1} ${fastq2}
@@ -1570,13 +1683,13 @@ process DECONTAMINER_STEP1_STAR_MAPPED {
     SAMPLE="${sample}"
     mkdir -p input_fastq
 
-    ${params.samtools_bin} fastq -@ ${task.cpus} -1 input_fastq/\${SAMPLE}_mapped_1.fq -2 input_fastq/\${SAMPLE}_mapped_2.fq -0 /dev/null -s /dev/null -N ${mapped_bam}
+    ${SAMTOOLS_BIN} fastq -@ ${task.cpus} -1 input_fastq/\${SAMPLE}_mapped_1.fq -2 input_fastq/\${SAMPLE}_mapped_2.fq -0 /dev/null -s /dev/null -N ${mapped_bam}
     
     echo "Running DecontaMiner on MAPPED reads...."
-    bash ${params.decontaminer_dir}/shell_scripts/decontaMiner.sh \\
+    bash ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh \\
         -i \$(pwd)/input_fastq \\
         -o \$(pwd)/decontaminer_output \\
-        -c ${params.decontaminer_config} \\
+        -c ${DECONTAMINER_CONFIG} \\
         -F fastq \\
         -s ${params.decontaminer_pairing} \\
         ${quality_filter} \\
@@ -1621,10 +1734,10 @@ process DECONTAMINER_STEP1_STAR_UNMAPPED {
     awk 'NR%4==1 {sub(/^@/, ""); print "@"\$0"/2"} NR%4!=1' ${unmapped_r2} > input_fastq/\${SAMPLE}_unmapped_2.fq
     
     echo "Running DecontaMiner on UNMAPPED reads...."
-    bash ${params.decontaminer_dir}/shell_scripts/decontaMiner.sh \\
+    bash ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh \\
         -i \$(pwd)/input_fastq \\
         -o \$(pwd)/decontaminer_output \\
-        -c ${params.decontaminer_config} \\
+        -c ${DECONTAMINER_CONFIG} \\
         -F fastq \\
         -s ${params.decontaminer_pairing} \\
         ${quality_filter} \\
@@ -1651,7 +1764,7 @@ process DECONTAMINER_STEP2 {
     set -euo pipefail
     
     if [ -d "${output_dir}/RESULTS/BACTERIA" ]; then
-        bash ${params.decontaminer_dir}/shell_scripts/filterBlastInfo.sh \\
+        bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
             -i \$(pwd)/${output_dir}/RESULTS/BACTERIA/ \\
             -s ${params.decontaminer_pairing} \\
             -g ${params.decontaminer_gap} \\
@@ -1661,7 +1774,7 @@ process DECONTAMINER_STEP2 {
     fi
 
     if [ -d "${output_dir}/RESULTS/FUNGI" ]; then
-        bash ${params.decontaminer_dir}/shell_scripts/filterBlastInfo.sh \\
+        bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
             -i \$(pwd)/${output_dir}/RESULTS/FUNGI/ \\
             -s ${params.decontaminer_pairing} \\
             -g ${params.decontaminer_gap} \\
@@ -1671,7 +1784,7 @@ process DECONTAMINER_STEP2 {
     fi
     
     if [ -d "${output_dir}/RESULTS/VIRUSES" ]; then
-        bash ${params.decontaminer_dir}/shell_scripts/filterBlastInfo.sh \\
+        bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
             -i \$(pwd)/${output_dir}/RESULTS/VIRUSES \\
             -s ${params.decontaminer_pairing} \\
             -g ${params.decontaminer_gap} \\
@@ -1708,7 +1821,7 @@ process DECONTAMINER_STEP3 {
     export PATH="/opt/R/4.5.1/bin:\$PATH"
 
     if [ -d "${filtered_dir}/RESULTS/BACTERIA/COLLECTED_INFO" ]; then
-        bash ${params.decontaminer_dir}/shell_scripts/collectInfo.sh \\
+        bash ${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh \\
             -i \$(pwd)/${filtered_dir}/RESULTS/BACTERIA/COLLECTED_INFO \\
             -t ${params.decontaminer_match_threshold} \\
             -V O \\
@@ -1720,7 +1833,7 @@ process DECONTAMINER_STEP3 {
     fi
 
     if [ -d "${filtered_dir}/RESULTS/FUNGI/COLLECTED_INFO" ]; then
-        bash ${params.decontaminer_dir}/shell_scripts/collectInfo.sh \\
+        bash ${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh \\
             -i \$(pwd)/${filtered_dir}/RESULTS/FUNGI/COLLECTED_INFO \\
             -t ${params.decontaminer_match_threshold} \\
             -V O \\
@@ -1731,7 +1844,7 @@ process DECONTAMINER_STEP3 {
     fi
 
     if [ -d "${filtered_dir}/RESULTS/VIRUSES/COLLECTED_INFO" ]; then
-        bash ${params.decontaminer_dir}/shell_scripts/collectInfo.sh \\
+        bash ${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh \\
             -i \$(pwd)/${filtered_dir}/RESULTS/VIRUSES/COLLECTED_INFO \\
             -t ${params.decontaminer_match_threshold} \\
             -V V \\
@@ -1767,7 +1880,7 @@ process FASTQC_MAPPED_BAM {
     """
     set -euo pipefail
     
-    ${params.fastqc_bin} \\
+    ${FASTQC_BIN} \\
         --outdir . \\
         --threads ${task.cpus} \\
         --format bam \\
@@ -1794,13 +1907,13 @@ process FASTQC_UNMAPPED_FASTQ {
     set -euo pipefail
     
     # Run FastQC on R1
-    ${params.fastqc_bin} \\
+    ${FASTQC_BIN} \\
         --outdir . \\
         --threads ${task.cpus} \\
         ${fastq_r1}
     
     # Run FastQC on R2
-    ${params.fastqc_bin} \\
+    ${FASTQC_BIN} \\
         --outdir . \\
         --threads ${task.cpus} \\
         ${fastq_r2}
@@ -1833,7 +1946,7 @@ process BLAST_MAPPED_READS_MULTI {
     echo "Extracting mapped reads from BAM: ${bam}" >&2
     
     # Extract mapped reads from BAM to FastQ
-    ${params.samtools_bin} fastq \\
+    ${SAMTOOLS_BIN} fastq \\
         -@ ${task.cpus} \\
         -1 ${sample}_mapped_R1.fastq \\
         -2 ${sample}_mapped_R2.fastq \\
@@ -1842,12 +1955,12 @@ process BLAST_MAPPED_READS_MULTI {
         -N \\
         ${bam}
     
-    ${params.reformat_bin} in=${sample}_mapped_R1.fastq out=${sample}_R1.fasta
-    ${params.reformat_bin} in=${sample}_mapped_R2.fastq out=${sample}_R2.fasta
+    ${REFORMAT_BIN} in=${sample}_mapped_R1.fastq out=${sample}_R1.fasta
+    ${REFORMAT_BIN} in=${sample}_mapped_R2.fastq out=${sample}_R2.fasta
 
     echo "Running BLAST on R1 against ${db_name}..." >&2
     # BLAST R1
-    ${params.blastn_bin} \\
+    ${BLASTN_BIN} \\
         -query ${sample}_R1.fasta \\
         -db ${db_path} \\
         -out ${sample}_${db_name}_R1.blast.tsv \\
@@ -1859,7 +1972,7 @@ process BLAST_MAPPED_READS_MULTI {
     
     echo "Running BLAST on R2 against ${db_name}..." >&2
     # BLAST R2
-    ${params.blastn_bin} \\
+    ${BLASTN_BIN} \\
         -query ${sample}_R2.fasta \\
         -db ${db_path} \\
         -out ${sample}_${db_name}_R2.blast.tsv \\
@@ -1955,28 +2068,28 @@ process BLAST_UNMAPPED_READS_MULTI {
     # Subsample if needed (sample from EACH file to maintain pairing info)
     MAX_READS_PER_FILE=${params.unmapped_subset_reads}
     if [ "\$READ_COUNT_R1" -gt "\$MAX_READS_PER_FILE" ]; then
-        ${params.seqtk_bin} sample -s${params.subset_seed} ${sample}_mapped_R1.fastq.gz ${params.mapped_subset_reads} | gzip > ${sample}_R1.sampled.fastq.gz
+        ${SEQTK_BIN} sample -s${params.subset_seed} ${sample}_mapped_R1.fastq.gz ${params.mapped_subset_reads} | gzip > ${sample}_R1.sampled.fastq.gz
         BLAST_INPUT_R1="${sample}_R1.sampled.fastq.gz"
     else
         BLAST_INPUT_R1="${r1_fastq}"
     fi
     
     if [ "\$READ_COUNT_R2" -gt "\$MAX_READS_PER_FILE" ]; then
-        ${params.seqtk_bin} sample -s${params.subset_seed} ${sample}_mapped_R2.fastq.gz ${params.mapped_subset_reads} | gzip > ${sample}_R2.sampled.fastq.gz
+        ${SEQTK_BIN} sample -s${params.subset_seed} ${sample}_mapped_R2.fastq.gz ${params.mapped_subset_reads} | gzip > ${sample}_R2.sampled.fastq.gz
         BLAST_INPUT_R2="${sample}_R2.sampled.fastq.gz"
     else
         BLAST_INPUT_R2="${r2_fastq}"
     fi
     
     # Convert R1 to FASTA
-    ${params.reformat_bin} in=\$BLAST_INPUT_R1 out=${sample}_R1.fasta
+    ${REFORMAT_BIN} in=\$BLAST_INPUT_R1 out=${sample}_R1.fasta
     
     # Convert R2 to FASTA
-    ${params.reformat_bin} in=\$BLAST_INPUT_R2 out=${sample}_R2.fasta
+    ${REFORMAT_BIN} in=\$BLAST_INPUT_R2 out=${sample}_R2.fasta
     
     echo "Running BLAST on R1 against ${db_name}..." >&2
     # BLAST R1
-    ${params.blastn_bin} \\
+    ${BLASTN_BIN} \\
         -query ${sample}_R1.fasta \\
         -db ${db_path} \\
         -out ${sample}_${db_name}_R1.blast.tsv \\
@@ -1988,7 +2101,7 @@ process BLAST_UNMAPPED_READS_MULTI {
     
     echo "Running BLAST on R2 against ${db_name}..." >&2
     # BLAST R2
-    ${params.blastn_bin} \\
+    ${BLASTN_BIN} \\
         -query ${sample}_R2.fasta \\
         -db ${db_path} \\
         -out ${sample}_${db_name}_R2.blast.tsv \\
@@ -2171,7 +2284,7 @@ process MULTIQC {
     fi
     
     # Run MultiQC
-    ${params.multiqc_bin} . \\
+    ${MULTIQC_BIN} . \\
         --force \\
         --title "Conterminator QC Report" \\
         --comment "RNA-seq Quality Control & Contamination Detection Pipeline" \\
@@ -2195,7 +2308,11 @@ workflow {
     // ===================================
 
     // Write pipeline information to output directory
-    WRITE_PIPELINE_INFO()
+    WRITE_PIPELINE_INFO(
+        file("${projectDir}/main.nf"),
+        file("${projectDir}/nextflow.config"),
+        file("${projectDir}/conterminator.def")
+    )
 
     // ===================================
     // PROCESS EXECUTION TRACKING FLAGS

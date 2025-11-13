@@ -3,7 +3,6 @@ From: ubuntu:22.04
 
 %labels
     Author Alaa Badreddine
-    Version 1.1
     Description Conterminator pipeline tools container
 
 %files
@@ -11,7 +10,7 @@ From: ubuntu:22.04
     /mnt/sas/Tools/decontaminer-RNAseq /opt/tools/decontaminer
 
 %help
-    Conterminator v1.1 - RNA-seq QC and Contamination Detection Pipeline
+    Conterminator - RNA-seq QC and Contamination Detection Pipeline
 
     This container includes all required bioinformatics tools:
     - STAR aligner (2.7.11b)
@@ -342,7 +341,7 @@ EOF
 
 %runscript
     echo "========================================="
-    echo "Conterminator v1.1 Container"
+    echo "Conterminator Container"
     echo "========================================="
     echo ""
     echo "Installed Tools and Versions:"
