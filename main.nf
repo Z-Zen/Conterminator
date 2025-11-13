@@ -968,25 +968,47 @@ process PREPARE_STRAIN_REFERENCE {
     PSEUDOGENOME_DIR="${params.strains_base_dir}/${strain}"
     STANDARD_REF_DIR="${params.standard_references_dir}/${strain}"
 
-    # Determine which directory to use
-    if [ -d "\${PSEUDOGENOME_DIR}" ]; then
-        STRAIN_DIR="\${PSEUDOGENOME_DIR}"
-        echo "INFO: Using strain-specific pseudogenome directory: \${STRAIN_DIR}" >&2
-    elif [ -d "\${STANDARD_REF_DIR}" ]; then
-        STRAIN_DIR="\${STANDARD_REF_DIR}"
-        echo "INFO: Using standard reference directory: \${STRAIN_DIR}" >&2
-    else
-        echo "ERROR: Could not find directory for ${strain}" >&2
-        echo "Searched in:" >&2
-        echo "  - \${PSEUDOGENOME_DIR}" >&2
-        echo "  - \${STANDARD_REF_DIR}" >&2
-        exit 1
-    fi
+    # For standard reference genomes like GRCm39, GRCm38, etc., check standard_references_dir FIRST
+    # For strain-specific pseudogenomes, check strains_base_dir first
+    case "${strain}" in
+        GRCm39|GRCm38|GRCh38|GRCh37|mm10|mm39|hg38|hg19)
+            # This is a standard reference genome - prioritize standard_references_dir
+            if [ -d "\${STANDARD_REF_DIR}" ]; then
+                STRAIN_DIR="\${STANDARD_REF_DIR}"
+                echo "INFO: Using standard reference directory: \${STRAIN_DIR}" >&2
+            elif [ -d "\${PSEUDOGENOME_DIR}" ]; then
+                STRAIN_DIR="\${PSEUDOGENOME_DIR}"
+                echo "INFO: Using strain-specific pseudogenome directory: \${STRAIN_DIR}" >&2
+            else
+                echo "ERROR: Could not find directory for ${strain}" >&2
+                echo "Searched in:" >&2
+                echo "  - \${STANDARD_REF_DIR} (standard reference)" >&2
+                echo "  - \${PSEUDOGENOME_DIR} (pseudogenome)" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            # This is a strain-specific pseudogenome - prioritize strains_base_dir
+            if [ -d "\${PSEUDOGENOME_DIR}" ]; then
+                STRAIN_DIR="\${PSEUDOGENOME_DIR}"
+                echo "INFO: Using strain-specific pseudogenome directory: \${STRAIN_DIR}" >&2
+            elif [ -d "\${STANDARD_REF_DIR}" ]; then
+                STRAIN_DIR="\${STANDARD_REF_DIR}"
+                echo "INFO: Using standard reference directory: \${STRAIN_DIR}" >&2
+            else
+                echo "ERROR: Could not find directory for ${strain}" >&2
+                echo "Searched in:" >&2
+                echo "  - \${PSEUDOGENOME_DIR} (pseudogenome)" >&2
+                echo "  - \${STANDARD_REF_DIR} (standard reference)" >&2
+                exit 1
+            fi
+            ;;
+    esac
 
     # First, try to find strain-specific pseudogenome files
     FASTA=\$(find "\${STRAIN_DIR}" -name "*pseudogenome__strain_${strain}.fa.gz" 2>/dev/null | head -1)
 
-    # If not found, look for any FASTA file
+    # If not found, look for any FASTA file (for standard reference genomes like GRCm39)
     if [ -z "\${FASTA}" ]; then
         echo "INFO: Strain-specific pseudogenome not found, searching for standard reference genome..." >&2
         FASTA=\$(find "\${STRAIN_DIR}" -type f \\( -name "*.fa.gz" -o -name "*.fasta.gz" -o -name "*.genome.fa.gz" \\) 2>/dev/null | head -1)
@@ -1003,7 +1025,7 @@ process PREPARE_STRAIN_REFERENCE {
     # First, try to find strain-specific GTF
     GTF=\$(find "\${STRAIN_DIR}" -name "*pseudogenome__strain_${strain}.gtf.gz" 2>/dev/null | head -1)
 
-    # If not found, look for any GTF file
+    # If not found, look for any GTF file (for standard reference genomes)
     if [ -z "\${GTF}" ]; then
         echo "INFO: Strain-specific GTF not found, searching for standard annotation..." >&2
         GTF=\$(find "\${STRAIN_DIR}" -type f \\( -name "*.gtf.gz" -o -name "*.gff.gz" -o -name "*.gff3.gz" \\) 2>/dev/null | head -1)
@@ -1680,12 +1702,6 @@ process DECONTAMINER_STEP1_STAR_MAPPED {
     def ribo_filter = params.decontaminer_ribo_filter ? "-R ${params.decontaminer_ribo_filter}" : ""
     """
     set -euo pipefail
-
-    # Fix permissions on DecontaMiner scripts if needed
-    if [ -f "${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh" ]; then
-        chmod +x ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh 2>/dev/null || true
-        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
-    fi
     
     SAMPLE="${sample}"
     mkdir -p input_fastq
@@ -1732,12 +1748,6 @@ process DECONTAMINER_STEP1_STAR_UNMAPPED {
     
     """
     set -euo pipefail
-
-    # Fix permissions on DecontaMiner scripts if needed
-    if [ -f "${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh" ]; then
-        chmod +x ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh 2>/dev/null || true
-        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
-    fi
     
     SAMPLE="${sample}"
     mkdir -p input_fastq
@@ -1775,12 +1785,6 @@ process DECONTAMINER_STEP2 {
     script:
     """
     set -euo pipefail
-
-    # Fix permissions on DecontaMiner scripts if needed
-    if [ -f "${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh" ]; then
-        chmod +x ${DECONTAMINER_DIR}/shell_scripts/*.sh 2>/dev/null || true
-        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
-    fi
     
     if [ -d "${output_dir}/RESULTS/BACTERIA" ]; then
         bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
@@ -1836,12 +1840,6 @@ process DECONTAMINER_STEP3 {
     def plots_flag = params.decontaminer_generate_plots ? "-P y" : ""
     """
     set -euo pipefail
-
-    # Fix permissions on DecontaMiner scripts if needed
-    if [ -f "${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh" ]; then
-        chmod +x ${DECONTAMINER_DIR}/shell_scripts/*.sh 2>/dev/null || true
-        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
-    fi
 
     export PATH="/opt/R/4.5.1/bin:\$PATH"
 
