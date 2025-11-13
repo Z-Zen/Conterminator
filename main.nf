@@ -725,8 +725,8 @@ def MULTIQC_BIN = usingSingularity ? "multiqc" : params.multiqc_bin
 def MAPINSIGHTS_BIN = usingSingularity ? "/opt/tools/bin/mapinsights" : params.mapinsights_bin
 
 // DecontaMiner paths
-def DECONTAMINER_DIR = usingSingularity ? "/opt/tools/decontaminer" : params.decontaminer_dir
-def DECONTAMINER_CONFIG = usingSingularity ? "/opt/tools/decontaminer/config_files/configure.txt" : params.decontaminer_config
+def DECONTAMINER_DIR = usingSingularity ? "/opt/tools/decontaminer/decontaMiner_1.4" : params.decontaminer_dir
+def DECONTAMINER_CONFIG = usingSingularity ? "/opt/tools/decontaminer/decontaMiner_1.4/config_files/configure_container.txt" : params.decontaminer_config
 
 if (usingSingularity) {
     println "INFO: Using Singularity - Tool paths configured for container execution"

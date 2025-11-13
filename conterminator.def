@@ -8,6 +8,8 @@ From: ubuntu:22.04
 %files
     # Copy modified DecontaMiner scripts from host to container
     /mnt/sas/Tools/decontaminer-RNAseq /opt/tools/decontaminer
+    # Copy container-specific config file
+    /mnt/sas/Tools/decontaminer-RNAseq/decontaMiner_1.4/config_files/configure_container.txt /opt/tools/decontaminer/decontaMiner_1.4/config_files/configure_container.txt
 
 %help
     Conterminator - RNA-seq QC and Contamination Detection Pipeline
@@ -308,7 +310,7 @@ EOF
     echo "Setting up DecontaMiner..."
     # Set execute permissions on DecontaMiner scripts
     if [ -d "/opt/tools/decontaminer" ]; then
-        chmod +x /opt/tools/decontaminer/*.pl /opt/tools/decontaminer/*.sh 2>/dev/null || true
+        find /opt/tools/decontaminer -type f \( -name "*.pl" -o -name "*.sh" \) -exec chmod +x {} \; 2>/dev/null || true
         echo "DecontaMiner configured at /opt/tools/decontaminer"
     else
         echo "WARNING: DecontaMiner directory not found. Ensure it was copied in %files section."
