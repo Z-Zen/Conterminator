@@ -43,9 +43,28 @@ A comprehensive Nextflow pipeline for RNA-seq quality control and contamination 
 
 ### Software Dependencies
 
-- **Nextflow** ≥ 23.04.0 (Run `curl -s https://get.nextflow.io | bash` to install)
+- **Nextflow** ≥ 23.04.0
 - **Java** ≥ 11
 - **Singularity** ≥ 3.5 (optional, for containerized execution)
+
+
+To install Nextflow, you can run:
+```bash
+curl -s https://get.nextflow.io | bash
+```
+
+If you get an error that your Java is not up-to-date, read below on how to install it.
+
+To install Java 24, you can run the following commands:
+```bash
+cd
+wget https://download.oracle.com/java/24/archive/jdk-24.0.2_linux-x64_bin.tar.gz
+tar -zxf jdk-24.0.2_linux-x64_bin.tar.gz
+echo 'export JAVA_CMD="/home/${USER%%@*}/jdk-24.0.2/bin/java"' >> ~/.bashrc
+echo 'export JAVA_HOME="/home/${USER%%@*}/jdk-24.0.2"' >> ~/.bashrc
+echo 'export PATH="$JAVA_HOME/bin:$PATH"' >> ~/.bashrc
+source .bashrc
+```
 
 **Note:** When using Singularity, Python and R dependencies are bundled in the container.
 
@@ -81,9 +100,21 @@ The pipeline uses the following bioinformatics tools (paths configurable in `nex
 ### Clone the Repository
 
 ```bash
-git clone https://gitlab.epfl.ch/abadreddine/conterminator.git
+git clone git@gitlab.epfl.ch:abadreddine/conterminator.git
 cd conterminator
 ```
+
+If the above command didn't work, make sure you have added your SSH key to gitlab. You can do it using the following commands:
+```bash
+ssh-keygen -t ed25519 -C "aleksandar.mihaylov@epfl.ch" -f ~/.ssh/id_ed25519_epfl
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519_epfl
+cat ~/.ssh/id_ed25519_epfl.pub
+```
+
+Copy the full output of the `cat` command and paste it in the [SSH keys](https://gitlab.epfl.ch/-/user_settings/ssh_keys) of Gitlab.
+Click on `Add new key` and copy the key inside the box. Then in the expiration date, click on the year and another time to prolong the key life.
+Once done, click on `Add key`. Now, you can try cloning again the repository.
 
 ### Tools
 
