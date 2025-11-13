@@ -129,50 +129,6 @@ params.multiqc_config         = null
 
 params.singularity_path = '/absolute/path/to/conterminator.sif'
 
-if (params.outdir == null){
-    println "Please specify the parameter '--outdir [output folder]'"
-    println "Run '~/nextflow run main.nf --help' for more information"
-    exit 1
-}
-
-if (workflow.profile.contains('singularity')) {
-    if (params.singularity_path && !file(params.singularity_path).exists()) {
-        println "ERROR: Singularity image '${params.singularity_path}' does not exist."
-        println "Please provide a valid path with '--singularity_path /full/path/to/conterminator.sif'"
-        println "Or check ${workflow.manifest.homePage} for instructions on how to build the image."
-        exit 1
-    }
-}
-
-///////////////////////////////////////////
-// Copy Nextflow PID to output directory //
-///////////////////////////////////////////
-
-def nextflowPid = new File(System.getProperty("user.dir") + "/.nextflow.pid")
-def target = new File(params.outdir + "/pid.txt")
-
-// Ensure output directory exists
-def outputDir = new File(params.outdir)
-if (!outputDir.exists()) {
-    outputDir.mkdirs()
-}
-
-// Read PID if file exists
-def pidContent = nextflowPid.exists() ? nextflowPid.text : "PID file not found\n"
-
-// Build pid content string
-def pidString = "---------------------\n" +
-            pidContent +
-            "${workflow.commandLine}\n" +
-            "Start: ${workflow.start.format('dd-MMM-yyyy HH:mm:ss')}\n"
-
-// Write or append to target
-if (target.exists()) {
-    target.append(pidString)
-} else {
-    target.write(pidString)
-}
-
 def content = new File('name.txt').text
 
 println content
@@ -421,6 +377,51 @@ def helpMessage() {
 if (params.help) {
     helpMessage()
     exit 0
+}
+
+
+if (params.outdir == null){
+    println "Please specify the parameter '--outdir [output folder]'"
+    println "Run '~/nextflow run main.nf --help' for more information"
+    exit 1
+}
+
+if (workflow.profile.contains('singularity')) {
+    if (params.singularity_path && !file(params.singularity_path).exists()) {
+        println "ERROR: Singularity image '${params.singularity_path}' does not exist."
+        println "Please provide a valid path with '--singularity_path /full/path/to/conterminator.sif'"
+        println "Or check ${workflow.manifest.homePage} for instructions on how to build the image."
+        exit 1
+    }
+}
+
+///////////////////////////////////////////
+// Copy Nextflow PID to output directory //
+///////////////////////////////////////////
+
+def nextflowPid = new File(System.getProperty("user.dir") + "/.nextflow.pid")
+def target = new File(params.outdir + "/pid.txt")
+
+// Ensure output directory exists
+def outputDir = new File(params.outdir)
+if (!outputDir.exists()) {
+    outputDir.mkdirs()
+}
+
+// Read PID if file exists
+def pidContent = nextflowPid.exists() ? nextflowPid.text : "PID file not found\n"
+
+// Build pid content string
+def pidString = "---------------------\n" +
+            pidContent +
+            "${workflow.commandLine}\n" +
+            "Start: ${workflow.start.format('dd-MMM-yyyy HH:mm:ss')}\n"
+
+// Write or append to target
+if (target.exists()) {
+    target.append(pidString)
+} else {
+    target.write(pidString)
 }
 
 
@@ -1679,6 +1680,12 @@ process DECONTAMINER_STEP1_STAR_MAPPED {
     def ribo_filter = params.decontaminer_ribo_filter ? "-R ${params.decontaminer_ribo_filter}" : ""
     """
     set -euo pipefail
+
+    # Fix permissions on DecontaMiner scripts if needed
+    if [ -f "${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh" ]; then
+        chmod +x ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh 2>/dev/null || true
+        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
+    fi
     
     SAMPLE="${sample}"
     mkdir -p input_fastq
@@ -1725,6 +1732,12 @@ process DECONTAMINER_STEP1_STAR_UNMAPPED {
     
     """
     set -euo pipefail
+
+    # Fix permissions on DecontaMiner scripts if needed
+    if [ -f "${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh" ]; then
+        chmod +x ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh 2>/dev/null || true
+        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
+    fi
     
     SAMPLE="${sample}"
     mkdir -p input_fastq
@@ -1762,6 +1775,12 @@ process DECONTAMINER_STEP2 {
     script:
     """
     set -euo pipefail
+
+    # Fix permissions on DecontaMiner scripts if needed
+    if [ -f "${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh" ]; then
+        chmod +x ${DECONTAMINER_DIR}/shell_scripts/*.sh 2>/dev/null || true
+        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
+    fi
     
     if [ -d "${output_dir}/RESULTS/BACTERIA" ]; then
         bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
@@ -1817,6 +1836,12 @@ process DECONTAMINER_STEP3 {
     def plots_flag = params.decontaminer_generate_plots ? "-P y" : ""
     """
     set -euo pipefail
+
+    # Fix permissions on DecontaMiner scripts if needed
+    if [ -f "${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh" ]; then
+        chmod +x ${DECONTAMINER_DIR}/shell_scripts/*.sh 2>/dev/null || true
+        chmod +x ${DECONTAMINER_DIR}/*.pl ${DECONTAMINER_DIR}/*.sh 2>/dev/null || true
+    fi
 
     export PATH="/opt/R/4.5.1/bin:\$PATH"
 
