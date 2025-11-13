@@ -97,7 +97,7 @@ pip install gdown
 gdown 1a2CevfBkMUjSt5R4AnQyDX4ofAHBZmfZ
 
 # Test the build
-singularity test conterminator_v1.1.sif
+singularity test conterminator.sif
 ```
 
 #### Option 2: build Singularity container (requires sudo)
@@ -106,10 +106,10 @@ Build the Singularity container with all dependencies bundled:
 
 ```bash
 # Build the container
-sudo singularity build conterminator_v1.1.sif conterminator.def
+sudo singularity build conterminator.sif conterminator.def
 
 # Test the build
-singularity test conterminator_v1.1.sif
+singularity test conterminator.sif
 ```
 
 #### Option 3: native installation 
@@ -127,7 +127,8 @@ params {
     // ... (see nextflow.config for all options)
     
     // Reference directories
-    strains_base_dir = "/path/to/pseudogenomes"
+    strains_base_dir = "/path/to/pseudogenomes"          // Strain-specific pseudogenomes
+    standard_references_dir = "/path/to/references/Mus"  // Standard reference genomes (GRCm39, etc.)
     star_index_dir = "/path/to/star/indices"
     contamination_blast_dbs = "/path/to/blast/databases"
 }
@@ -140,10 +141,10 @@ params {
 nextflow run main.nf --help
 
 # With Singularity
-nextflow run main.nf --singularity_path /path/to/conterminator_v1.1.sif -profile singularity --help
+nextflow run main.nf --singularity_path /path/to/conterminator.sif -profile singularity --help
 
 # With Singularity + Slurm
-nextflow run main.nf --singularity_path /path/to/conterminator_v1.1.sif -profile singularity,slurm --help
+nextflow run main.nf --singularity_path /path/to/conterminator.sif -profile singularity,slurm --help
 ```
 
 ## Quick Start
@@ -174,7 +175,7 @@ nextflow run main.nf \
 ```bash
 nextflow run main.nf \
     -profile singularity \
-    --singularity_path /path/to/conterminator_v1.1.sif \
+    --singularity_path /path/to/conterminator.sif \
     --sample_sheet samples.tsv \
     --outdir results \
     -bg &> results.log
@@ -185,7 +186,7 @@ nextflow run main.nf \
 ```bash
 nextflow run main.nf \
     -profile slurm,singularity \
-    --singularity_path /path/to/conterminator_v1.1.sif \
+    --singularity_path /path/to/conterminator.sif \
     --sample_sheet samples.tsv \
     --outdir results \
     --max_parallel_samples 10 \
@@ -197,7 +198,7 @@ nextflow run main.nf \
 ```bash
 nextflow run main.nf \
     -profile slurm,singularity \
-    --singularity_path /path/to/conterminator_v1.1.sif \
+    --singularity_path /path/to/conterminator.sif \
     --sample_sheet samples.tsv \
     --outdir results_full \
     --subset_for_fastq_qc true \
@@ -322,6 +323,8 @@ strains_base_dir/
 ├── GRCm39.genome.fa.gz
 └── gencode.vM35.primary_assembly.annotation.gtf.gz
 ```
+
+**Note on Standard Reference Genomes (v1.2+):** The pipeline now supports storing standard reference genomes (like GRCm39, GRCm38) in a separate directory specified by `params.standard_references_dir` (default: `/mnt/sas/Data/References/Mus`). The pipeline will automatically search both `strains_base_dir` (for strain-specific pseudogenomes) and `standard_references_dir` (for standard references) when resolving strain names. This allows you to maintain your existing HDP pseudogenome collection while using standard Ensembl/GENCODE references without reorganizing your directory structure.
 
 ## Usage
 
@@ -496,7 +499,7 @@ You can find the latest running pid in the `pid.txt` in the root of output direc
 cat pid.txt
 # ---------------------
 # 4149804
-# nextflow run main.nf --sample_sheet input_test/sample_sheet.tsv --outdir results_test --singularity_path /mnt/sas/Users/abadreddine/Projects/Conterminator/conterminator_v1.1.sif -profile singularity -resume 2b29d621-8eff-400c-83a2-05146c4f6131
+# nextflow run main.nf --sample_sheet input_test/sample_sheet.tsv --outdir results_test --singularity_path /mnt/sas/Users/abadreddine/Projects/Conterminator/conterminator.sif -profile singularity -resume 2b29d621-8eff-400c-83a2-05146c4f6131
 # Start: 07-Nov-2025 01:25:30
 
 # Then you can use the PID number to kill the running job
@@ -526,6 +529,16 @@ For bug reports and feature requests, please open an issue on GitLab.
 ---
 
 ## Version History
+
+- **v1.2** (December 2025) - Enhanced reference genome support:
+  - Dual directory support for reference genomes:
+    - `strains_base_dir` for strain-specific pseudogenomes
+    - `standard_references_dir` for standard reference genomes (GRCm39, GRCm38, etc.)
+  - Automatic directory resolution - pipeline searches both locations for each strain
+  - Flexible reference file pattern matching for standard genomes
+  - Fixed WRITE_PIPELINE_INFO staging to avoid file collision errors
+  - Pipeline configuration files (main.nf, nextflow.config, conterminator.def) now copied to output for reproducibility
+  - Dynamic user path support using `${System.getProperty('user.home')}`
 
 - **v1.1** (November 2025) - Major updates:
   - Full Singularity container support with all tools bundled
