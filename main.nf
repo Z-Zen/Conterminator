@@ -23,7 +23,7 @@ params.subset_seed              = 100       // Random seed for reproducibility
 params.run_star_alignment       = true
 params.star_threads             = 20
 params.strain                   = null
-params.strains_base_dir         = "/home/${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes"
+params.strains_base_dir         = "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes"
 params.standard_references_dir  = "/mnt/sas/Data/References/Mus"  // For standard reference genomes like GRCm39, GRCm38
 params.star_index_dir           = "/mnt/sas/Data/References/Mus"
 params.star_index_threads       = 20
@@ -162,7 +162,7 @@ def helpMessage() {
     
     REFERENCE FILES:
       --strains_base_dir <path>        Directory with strain-specific pseudogenomes
-                                       (default: /home/${params.user_home_dir}/.../HDP_pseudogenomes)
+                                       (default: ${params.user_home_dir}/.../HDP_pseudogenomes)
       --standard_references_dir <path> Directory with standard reference genomes (e.g., GRCm39, GRCm38)
                                        (default: /mnt/sas/Data/References/Mus)
       --star_index_dir <path>          Directory for STAR indices (default: /mnt/sas/Data/References/Mus)
@@ -1490,7 +1490,7 @@ process QUALIMAP_BAMQC {
     params.run_qualimap && (params.qualimap_mode == "bamqc" || params.qualimap_mode == "both")
 
     script:
-    def gtf = "/home/${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
+    def gtf = "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
     """
     set -euo pipefail
 
@@ -1534,7 +1534,7 @@ process QUALIMAP_RNASEQ {
     params.run_qualimap && (params.qualimap_mode == "rnaseq" || params.qualimap_mode == "both")
 
     script:
-    def gtf = "/home/${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
+    def gtf = "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
     """
     set -euo pipefail
 
