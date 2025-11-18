@@ -3,6 +3,7 @@ From: ubuntu:22.04
 
 %labels
     Author Alaa Badreddine
+    Version 1.2
     Description Conterminator pipeline tools container
 
 %files
@@ -12,7 +13,7 @@ From: ubuntu:22.04
     /mnt/sas/Tools/decontaminer-RNAseq/decontaMiner_1.4/config_files/configure_container.txt /opt/tools/decontaminer/decontaMiner_1.4/config_files/configure_container.txt
 
 %help
-    Conterminator - RNA-seq QC and Contamination Detection Pipeline
+    Conterminator v1.2 - RNA-seq QC and Contamination Detection Pipeline
 
     This container includes all required bioinformatics tools:
     - STAR aligner (2.7.11b)
@@ -317,10 +318,21 @@ EOF
     fi
 
     # =====================
-    # Install MapInsights (optional - if available)
+    # Build MapInsights from source
     # =====================
-    # Note: MapInsights may need to be compiled from source
-    # Add installation steps if you have the source
+    echo "Building MapInsights from source..."
+    cd /opt/tools
+    git clone https://github.com/subrata-codeons/mapinsights
+    cd mapinsights
+    make
+    if [ -f "mapinsights" ]; then
+        chmod +x mapinsights
+        ln -s /opt/tools/mapinsights/mapinsights /opt/tools/bin/mapinsights
+        echo "MapInsights successfully compiled and installed"
+    else
+        echo "WARNING: MapInsights compilation failed"
+    fi
+    cd /opt/tools
 
     # =====================
     # Create wrapper scripts
@@ -343,7 +355,7 @@ EOF
 
 %runscript
     echo "========================================="
-    echo "Conterminator Container"
+    echo "Conterminator v1.1 Container"
     echo "========================================="
     echo ""
     echo "Installed Tools and Versions:"

@@ -712,7 +712,7 @@ def QUALIMAP_BIN = usingSingularity ? "/opt/tools/bin/qualimap" : params.qualima
 // Analysis tools
 def BEDTOOLS_BIN = usingSingularity ? "/opt/tools/bin/bedtools" : params.bedtools_bin
 def PICARD_JAR = usingSingularity ? "/opt/tools/picard/picard.jar" : params.picard_jar
-def DEEPTOOLS_GCBIAS = usingSingularity ? "computeGCBias" : params.deeptools_gcbias
+def DEEPTOOLS_GCBIAS = usingSingularity ? "/usr/local/bin/computeGCBias" : params.deeptools_gcbias
 def BLASTN_BIN = usingSingularity ? "/opt/tools/blast/bin/blastn" : params.blastn_bin
 
 // UCSC tools
@@ -721,7 +721,7 @@ def FA2BIT_BIN = usingSingularity ? "/opt/tools/bin/faToTwoBit" : params.fa2bit_
 
 // Other tools
 def REFORMAT_BIN = usingSingularity ? "/opt/tools/bbmap/reformat.sh" : params.reformat_bin
-def MULTIQC_BIN = usingSingularity ? "multiqc" : params.multiqc_bin
+def MULTIQC_BIN = usingSingularity ? "/usr/local/bin/multiqc" : params.multiqc_bin
 def MAPINSIGHTS_BIN = usingSingularity ? "/opt/tools/bin/mapinsights" : params.mapinsights_bin
 
 // DecontaMiner paths
@@ -1152,7 +1152,7 @@ process PREP_STRAIN_REFERENCE_FOR_QC {
     tuple val(strain), path(fasta_gz), path(gtf)
 
     output:
-    tuple val(strain), path("${strain}.fa"), path("${strain}.fa.fai"), path("${strain}.dict"), path("${strain}.bed"), path("${strain}_effective_size.txt"), path("${strain}.2bit"), emit: qc_references
+    tuple val(strain), path("${strain}.fa"), path("${strain}.fa.fai"), path("${strain}.dict"), path("${strain}.bed"), path("${strain}_effective_size.txt"), path("${strain}.2bit"), path("${strain}_annotation.gtf.gz"), emit: qc_references
 
     script:
     """
@@ -1183,6 +1183,10 @@ process PREP_STRAIN_REFERENCE_FOR_QC {
     else
         # Create empty placeholder
         touch ${strain}.2bit
+    fi
+
+    if [[ "${gtf}" != "${strain}_annotation.gtf.gz" ]]; then
+        cp ${gtf} ${strain}_annotation.gtf.gz
     fi
 
     echo "QC references prepared for ${strain}"
@@ -1430,7 +1434,7 @@ process PICARD_GC_BIAS {
     script:
     """
     set -euo pipefail
-    export PATH="/opt/R/4.5.1/bin:\$PATH"
+    export PATH="/opt/R/4.5.2/bin:\$PATH"
 
     java -jar ${PICARD_JAR} CollectGcBiasMetrics \\
         I=${bam} \\
@@ -1474,7 +1478,7 @@ process BEDTOOLS_GC_COVERAGE {
     """
     set -euo pipefail
 
-    export PATH="/opt/R/4.5.1/bin:\$PATH"
+    export PATH="/opt/R/4.5.2/bin:\$PATH"
 
     ${BEDTOOLS_BIN} makewindows -b ${genome_bed} -w ${params.windowsize} -s ${params.window_step} > ${sample}.windows.bed
 
@@ -1512,7 +1516,11 @@ process QUALIMAP_BAMQC {
     params.run_qualimap && (params.qualimap_mode == "bamqc" || params.qualimap_mode == "both")
 
     script:
-    def gtf = "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
+    // Check if strain is a standard reference
+    def standard_strains = ['GRCm39']
+    def gtf = standard_strains.contains(strain) ?
+        "${params.standard_references_dir}/${strain}/*.gtf.gz" :
+        "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
     """
     set -euo pipefail
 
@@ -1540,7 +1548,7 @@ process QUALIMAP_RNASEQ {
     publishDir "${params.outdir}/Output/qualimap/${sample}/rnaseq", mode: 'copy'
 
     input:
-    tuple val(sample), val(strain), path(bam), path(bai), val(bam_type)
+    tuple val(sample), val(strain), path(bam), path(bai), val(bam_type), path(gtf)
 
     output:
     path "qualimap_rnaseq_unique_mapped_reads/**", emit: reports
@@ -1556,7 +1564,6 @@ process QUALIMAP_RNASEQ {
     params.run_qualimap && (params.qualimap_mode == "rnaseq" || params.qualimap_mode == "both")
 
     script:
-    def gtf = "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
     """
     set -euo pipefail
 
@@ -1608,7 +1615,7 @@ process MAPINSIGHTS {
     """
     set -euo pipefail
     
-    export PATH="/opt/R/4.5.1/bin:\$PATH"
+    export PATH="/opt/R/4.5.2/bin:\$PATH"
 
     mkdir ${sample}_mapinsights
     
@@ -1673,6 +1680,7 @@ process FASTQC_INPUT_FASTQ {
     
     ${FASTQC_BIN} \\
         --outdir . \\
+        --nogroup \\
         --threads ${task.cpus} \\
         ${fastq1} ${fastq2}
     """
@@ -1841,7 +1849,7 @@ process DECONTAMINER_STEP3 {
     """
     set -euo pipefail
 
-    export PATH="/opt/R/4.5.1/bin:\$PATH"
+    export PATH="/opt/R/4.5.2/bin:\$PATH"
 
     if [ -d "${filtered_dir}/RESULTS/BACTERIA/COLLECTED_INFO" ]; then
         bash ${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh \\
@@ -1905,6 +1913,7 @@ process FASTQC_MAPPED_BAM {
     
     ${FASTQC_BIN} \\
         --outdir . \\
+        --nogroup \\
         --threads ${task.cpus} \\
         --format bam \\
         ${bam}
@@ -1932,12 +1941,14 @@ process FASTQC_UNMAPPED_FASTQ {
     # Run FastQC on R1
     ${FASTQC_BIN} \\
         --outdir . \\
+        --nogroup \\
         --threads ${task.cpus} \\
         ${fastq_r1}
     
     # Run FastQC on R2
     ${FASTQC_BIN} \\
         --outdir . \\
+        --nogroup \\
         --threads ${task.cpus} \\
         ${fastq_r2}
     """
@@ -1961,8 +1972,6 @@ process BLAST_MAPPED_READS_MULTI {
 
     script:
     """
-    set -euo pipefail
-    
     export BLASTDB=/mnt/sas/Tools/blast_databases
     
     echo "Starting BLAST analysis: ${sample} vs ${db_name}" >&2
@@ -2070,7 +2079,6 @@ process BLAST_UNMAPPED_READS_MULTI {
 
     script:
     """
-    set -euo pipefail
     
     export BLASTDB=/mnt/sas/Tools/blast_databases
     
@@ -2282,7 +2290,7 @@ process MULTIQC {
     publishDir "${params.outdir}/Output/multiqc", mode: 'copy'
 
     input:
-    path('*')
+    path(reports, stageAs: "?/*")  // Stage with subdirectories
 
     output:
     path "multiqc_report.html", emit: report
@@ -2298,7 +2306,7 @@ process MULTIQC {
     set -euo pipefail
     
     # Count input files
-    FILE_COUNT=\$(ls -1 2>/dev/null | wc -l)
+    FILE_COUNT=\$(find . -type f 2>/dev/null | wc -l)
     echo "MultiQC found \$FILE_COUNT input files"
     
     if [ "\$FILE_COUNT" -eq 0 ]; then
@@ -2635,13 +2643,13 @@ workflow {
         qc_bams_with_refs = qc_bams
                 .map { sample, strain, bam, bai, type -> tuple(strain, sample, bam, bai, type) }
                 .combine(strain_qc_refs, by: 0)
-                .map { strain, sample, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
-                    tuple(sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit)
+                .map { strain, sample, bam, bai, type, fa, fai, dict, bed, eff_size, twobit, gtf ->
+                    tuple(sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit, gtf)
                 }
 
         // Run QC tools
         if (params.run_deeptools) {
-            qc_bams_for_deeptools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+            qc_bams_for_deeptools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit, gtf ->
                 tuple("${sample}_${strain}", bam, bai, type, twobit, eff_size)
             }
             // Group by strain and run once per strain
@@ -2662,7 +2670,7 @@ workflow {
         }
 
         if (params.run_picard_gc) {
-            qc_bams_for_picard = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+            qc_bams_for_picard = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit, gtf ->
                 tuple("${sample}_${strain}", bam, bai, type, fa)
             }
             // Group by reference (strain) and run once per strain
@@ -2681,7 +2689,7 @@ workflow {
         }
 
         if (params.run_bedtools_gc) {
-            qc_bams_for_bedtools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+            qc_bams_for_bedtools = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit, gtf ->
                 tuple("${sample}_${strain}", bam, bai, type, fa, bed)
             }
             // Group by reference (strain) and run once per strain
@@ -2701,7 +2709,7 @@ workflow {
         }
 
         if (params.run_mapinsights) {
-            qc_bams_for_mapinsights = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
+            qc_bams_for_mapinsights = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit, gtf ->
                 tuple("${sample}_${strain}", bam, bai, type, fa)
             }
             // Group by reference (strain) and run once per strain
@@ -2719,16 +2727,16 @@ workflow {
         }
 
         if (params.run_qualimap) {
-            qc_bams_for_qualimap = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit ->
-                tuple("${sample}_${strain}", strain, bam, bai, type, fa)
+            qc_bams_for_qualimap = qc_bams_with_refs.map { sample, strain, bam, bai, type, fa, fai, dict, bed, eff_size, twobit, gtf ->
+                tuple("${sample}_${strain}", strain, bam, bai, type, fa, gtf)
             }
 
             if (params.qualimap_mode == "bamqc" || params.qualimap_mode == "both") {
                 // Group by reference (strain) and run once per strain
                 qc_bams_for_qualimap
-                    .map { id, strain, bam, bai, type, fa -> tuple(fa.name, id, strain, bam, bai, type, fa) }
+                    .map { id, strain, bam, bai, type, fa, gtf -> tuple(fa.name, id, strain, bam, bai, type, fa, gtf) }
                     .groupTuple(by: 0)
-                    .flatMap { key, ids, strains, bams, bais, types, fas ->
+                    .flatMap { key, ids, strains, bams, bais, types, fas, gtfs ->
                         [ids, strains, bams, bais, types].transpose().collect { id, strain, bam, bai, type ->
                             tuple(id, strain, bam, bai, type, fas[0])
                         }
@@ -2740,7 +2748,7 @@ workflow {
             }
 
             if (params.qualimap_mode == "rnaseq" || params.qualimap_mode == "both") {
-                QUALIMAP_RNASEQ(qc_bams_for_qualimap.map { id, strain, bam, bai, type, fa -> tuple(id, strain, bam, bai, type) })
+                QUALIMAP_RNASEQ(qc_bams_for_qualimap.map { id, strain, bam, bai, type, fa, gtf -> tuple(id, strain, bam, bai, type, gtf) })
                 ran_qualimap_rnaseq = true
             }
         }
