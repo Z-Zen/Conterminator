@@ -762,9 +762,13 @@ if (params.run_decontaminer) {
     if (!DECONTAMINER_CONFIG) {
         exit 1, "ERROR: DecontaMiner requires --decontaminer_config"
     }
-    // Skip file existence check when using Singularity (file is inside container)
-    if (!usingSingularity && !file(DECONTAMINER_CONFIG).exists()) {
-        exit 1, "ERROR: DecontaMiner config file not found: ${DECONTAMINER_CONFIG}"
+    // Only check file existence when not using Singularity
+    if (!usingSingularity) {
+        if (!file(DECONTAMINER_CONFIG).exists()) {
+            exit 1, "ERROR: DecontaMiner config file not found: ${DECONTAMINER_CONFIG}"
+        }
+    } else {
+        println "INFO: DecontaMiner config will be used from container: ${DECONTAMINER_CONFIG}"
     }
 }
 
