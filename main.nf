@@ -762,13 +762,9 @@ if (params.run_decontaminer) {
     if (!DECONTAMINER_CONFIG) {
         exit 1, "ERROR: DecontaMiner requires --decontaminer_config"
     }
-    // Only check file existence when not using Singularity
-    if (!usingSingularity) {
-        if (!file(DECONTAMINER_CONFIG).exists()) {
-            exit 1, "ERROR: DecontaMiner config file not found: ${DECONTAMINER_CONFIG}"
-        }
-    } else {
-        println "INFO: DecontaMiner config will be used from container: ${DECONTAMINER_CONFIG}"
+    // Skip file existence check when using Singularity (file is inside container)
+    if (!usingSingularity && !file(DECONTAMINER_CONFIG).exists()) {
+        exit 1, "ERROR: DecontaMiner config file not found: ${DECONTAMINER_CONFIG}"
     }
 }
 
@@ -3116,11 +3112,11 @@ workflow.onComplete {
     ${params.strain ? "Strains:  ${params.strain}" : ''}${singularityInfo}
 
     SUBSAMPLING SUMMARY:
-    ${params.subset_for_fastq_qc ? "  ✓ FastQ QC: ${params.subset_fastq_qc_reads} reads" : "  X FastQ QC: Full FASTQs"}
-    ${params.subset_for_star ? "  ✓ STAR: ${params.subset_star_reads} reads" : "  X STAR: Full FASTQs"}
-    ${params.subset_bam_for_qc ? "  ✓ BAM QC: ${params.bam_qc_subset_mapped} reads" : "  X BAM QC: Full BAMs"}
-    ${params.subset_unmapped_for_blast ? "  ✓ BLAST: ${params.unmapped_subset_reads} reads" : "  X BLAST: Full unmapped"}
-    ${params.subset_unmapped_for_decontaminer ? "  ✓ DecontaMiner: ${params.unmapped_subset_reads} reads" : "  X DecontaMiner: Full unmapped"}
+    ${params.subset_for_fastq_qc ? "  FastQ QC: ${params.subset_fastq_qc_reads} reads" : "  X FastQ QC: Full FASTQs"}
+    ${params.subset_for_star ? "  STAR: ${params.subset_star_reads} reads" : "  X STAR: Full FASTQs"}
+    ${params.subset_bam_for_qc ? "  BAM QC: ${params.bam_qc_subset_mapped} reads" : "  X BAM QC: Full BAMs"}
+    ${params.subset_unmapped_for_blast ? "  BLAST: ${params.unmapped_subset_reads} reads" : "  X BLAST: Full unmapped"}
+    ${params.subset_unmapped_for_decontaminer ? "  DecontaMiner: ${params.unmapped_subset_reads} reads" : "  X DecontaMiner: Full unmapped"}
 
     ${params.run_multiqc ? "To generate MultiQC report:\n    cd ${params.outdir} && multiqc . --force" : ''}
     ========================================
