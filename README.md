@@ -175,7 +175,7 @@ nextflow run main.nf --help
 nextflow run main.nf --singularity_path /path/to/conterminator.sif -profile singularity --help
 
 # With Singularity + Slurm
-nextflow run main.nf --singularity_path /path/to/conterminator.sif -profile singularity,slurm --help
+nextflow run main.nf --singularity_path /path/to/conterminator.sif -profile singularity_hpc,slurm --help
 ```
 
 ## Quick Start
@@ -196,48 +196,57 @@ sample2	C57BL_6J	fastq	/data/sample2_R1.fq.gz	/data/sample2_R2.fq.gz
 
 ```bash
 nextflow run main.nf \
-    --sample_sheet samples.tsv \
-    --outdir results \
-    -bg &> results.log
+--sample_sheet samples.tsv \
+--outdir results \
+-bg &> results.log
 ```
 
 #### With Singularity Container
 
 ```bash
 nextflow run main.nf \
-    -profile singularity \
-    --singularity_path /path/to/conterminator.sif \
-    --sample_sheet samples.tsv \
-    --outdir results \
-    -bg &> results.log
+-profile singularity \
+--singularity_path /path/to/conterminator.sif \
+--sample_sheet samples.tsv \
+--outdir results \
+-bg &> results.log
 ```
 
 #### On SLURM Cluster with Singularity (Recommended)
 
+
+When running the pipeline on SLURM, you cannot provide data located on the RCP storage or archive. You will need to copy some dependencies from the lispserver before you can run the pipeline.
+
+Copy them to either `/scratch/[username]`, `/export/lisp/[username]`, or `/work/lisp/[username]`. Data copied on `scratch` stays for 30 days before they are deleted. Other spaces cost money to put data on them.
+
+For example, you can copy the `GRCm39` genome from the lispserver to `/scratch` with the following command:
+
 ```bash
-nextflow run main.nf \
-    -profile slurm,singularity \
-    --singularity_path /path/to/conterminator.sif \
-    --sample_sheet samples.tsv \
-    --outdir results \
-    --max_parallel_samples 10 \
-    -bg &> results.log
+cd /scratch/`whoami`/
+mkdir -p Data/Mus/GRCm39 blast_databases
+
+cd /scratch/`whoami`/Data/Mus/GRCm39
+# enter password when prompted from the command below
+scp `whoami`@lispserver.rcp.epfl.ch:/mnt/sas/Data/References/Mus/GRCm39/* .
+
+cd /scratch/`whoami`/blast_databases/
+# enter password when prompted from the command below
+scp `whoami`@lispserver.rcp.epfl.ch:/mnt/sas/Tools/blast_databases/* .
 ```
 
-#### Complete Example with Performance Tuning
+Then, you can run the pipeline using:
 
 ```bash
 nextflow run main.nf \
-    -profile slurm,singularity \
-    --singularity_path /path/to/conterminator.sif \
-    --sample_sheet samples.tsv \
-    --outdir results_full \
-    --subset_for_fastq_qc true \
-    --subset_fastq_qc_reads 100000 \
-    --subset_bam_for_qc true \
-    --bam_qc_subset_mapped 200000 \
-    --max_parallel_samples 10 \
-    -bg &> results.log
+-profile slurm,singularity_hpc \
+--singularity_path conterminator.sif \
+--sample_sheet samples.tsv \
+--outdir /scratch/`whoami`/myproject_results/ \
+--star_index_dir /scratch/`whoami`/Data/Mus \
+--strains_base_dir /scratch/`whoami`/Data/Mus \
+--standard_references_dir /scratch/`whoami`/Data/Mus \
+--contamination_blast_dbs /scratch/`whoami`/blast_databases/ \
+-bg &> ~/myproject_results.log
 ```
 
 ## Input Format
