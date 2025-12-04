@@ -11,6 +11,8 @@ From: ubuntu:22.04
     /mnt/sas/Tools/decontaminer-RNAseq /opt/tools/decontaminer
     # Copy container-specific config file
     /mnt/sas/Tools/decontaminer-RNAseq/decontaMiner_1.4/config_files/configure_container.txt /opt/tools/decontaminer/decontaMiner_1.4/config_files/configure_container.txt
+    # Copy FastQ Screen genomes INTO the container
+    /mnt/sas/Tools/FastQ-Screen-0.16.0/FastQ_Screen_Genomes /opt/fastq_screen_genomes
 
 %help
     Conterminator v1.2 - RNA-seq QC and Contamination Detection Pipeline
@@ -22,17 +24,16 @@ From: ubuntu:22.04
     - Picard (3.4.0), Qualimap (2.3), MapInsights
     - BLAST+ suite (2.17.0+)
     - DeepTools (3.5.6), BBMap (39.37)
+    - Bowtie2 (2.5.4)
     - DecontaMiner (1.4, modified for pipeline)
     - Python3 with plotting libraries
+    - FastQ Screen reference genomes (included)
     
     Usage with Nextflow:
-        nextflow run main.nf -profile singularity
+        nextflow run main.nf -profile singularity_hpc,slurm
     
-    Bind mount your data directories:
-        singularity exec \
-            --bind /mnt/sas/Data:/data \
-            --bind /mnt/sas/Tools/blast_databases:/blastdb \
-            conterminator.sif <command>
+    FastQ Screen genomes are pre-installed at:
+        /opt/fastq_screen_genomes/
 
 %environment
     # Set tool paths
@@ -43,6 +44,7 @@ From: ubuntu:22.04
     export PATH=/opt/tools/seqtk:$PATH
     export PATH=/opt/tools/blast/bin:$PATH
     export PATH=/opt/tools/decontaminer:$PATH
+    export PATH=/opt/tools/bowtie2:$PATH
     export PYTHONPATH=/opt/python_libs:$PYTHONPATH
 
     # Locale settings to prevent Perl warnings
@@ -52,6 +54,9 @@ From: ubuntu:22.04
 
     # BLAST database path (will be bind-mounted)
     export BLASTDB=/blastdb
+
+    # FastQ Screen configuration
+    export FASTQ_SCREEN_CONF=/opt/tools/fastq_screen.conf
 
     # Java memory for tools
     export _JAVA_OPTIONS="-Xmx10g"
@@ -193,6 +198,18 @@ From: ubuntu:22.04
     rm -rf bedtools2 bedtools-2.31.1.tar.gz
     
     # =====================
+    # Install Bowtie2 (2.5.4) - Required for FastQ Screen
+    # =====================
+    echo "Installing Bowtie2..."
+    cd /opt/tools
+    wget https://github.com/BenLangmead/bowtie2/releases/download/v2.5.4/bowtie2-2.5.4-linux-x86_64.zip
+    unzip bowtie2-2.5.4-linux-x86_64.zip
+    mv bowtie2-2.5.4-linux-x86_64 bowtie2
+    # Add to PATH
+    ln -s /opt/tools/bowtie2/bowtie2* /opt/tools/bin/
+    rm bowtie2-2.5.4-linux-x86_64.zip
+    
+    # =====================
     # Install FastQC (0.12.1)
     # =====================
     echo "Installing FastQC..."
@@ -228,6 +245,35 @@ perl /opt/tools/FastQ_Screen/fastq_screen "$@"
 EOF
     chmod +x /opt/tools/bin/fastq_screen
     rm fastq_screen_v0.16.0.tar.gz
+
+    # =====================
+    # Create FastQ Screen Configuration File
+    # =====================
+    echo "Creating FastQ Screen configuration..."
+    cat > /opt/tools/fastq_screen.conf << 'FQSCONF'
+# FastQ Screen Configuration for Conterminator Container
+# All paths point to genomes embedded in the container
+
+BOWTIE2 /opt/tools/bowtie2/bowtie2
+THREADS 15
+
+DATABASE Human      /opt/fastq_screen_genomes/Human/Homo_sapiens.GRCh38
+DATABASE Mouse      /opt/fastq_screen_genomes/Mouse/Mus_musculus.GRCm38
+DATABASE Rat        /opt/fastq_screen_genomes/Rat/Rnor_6.0
+DATABASE Drosophila /opt/fastq_screen_genomes/Drosophila/BDGP6
+DATABASE Worm       /opt/fastq_screen_genomes/Worm/Caenorhabditis_elegans.WBcel235
+DATABASE Yeast      /opt/fastq_screen_genomes/Yeast/Saccharomyces_cerevisiae.R64-1-1
+DATABASE Arabidopsis /opt/fastq_screen_genomes/Arabidopsis/Arabidopsis_thaliana.TAIR10
+DATABASE Ecoli      /opt/fastq_screen_genomes/E_coli/Ecoli
+DATABASE rRNA       /opt/fastq_screen_genomes/rRNA/GRCm38_rRNA
+DATABASE MT         /opt/fastq_screen_genomes/Mitochondria/mitochondria
+DATABASE PhiX       /opt/fastq_screen_genomes/PhiX/phi_plus_SNPs
+DATABASE Lambda     /opt/fastq_screen_genomes/Lambda/Lambda
+DATABASE Vectors    /opt/fastq_screen_genomes/Vectors/Vectors
+DATABASE Adapters   /opt/fastq_screen_genomes/Adapters/Contaminants
+FQSCONF
+
+    echo "FastQ Screen configuration created at /opt/tools/fastq_screen.conf"
 
     # =====================
     # Install Picard (3.4.0)
@@ -335,6 +381,52 @@ EOF
     cd /opt/tools
 
     # =====================
+    # Install libgtextutils (dependency for FASTX-Toolkit)
+    # =====================
+    echo "Installing libgtextutils (FASTX dependency)..."
+    cd /opt/tools
+    wget https://github.com/agordon/libgtextutils/releases/download/0.7/libgtextutils-0.7.tar.gz
+    tar -xzf libgtextutils-0.7.tar.gz
+    cd libgtextutils-0.7
+    # Patch for modern C++ compiler compatibility
+    sed -i 's/return input_stream ;/return static_cast<bool>(input_stream);/' src/gtextutils/text_line_reader.cpp
+    ./configure --prefix=/usr/local
+    make && make install
+    cd /opt/tools
+    rm -rf libgtextutils-0.7.tar.gz libgtextutils-0.7
+    echo "libgtextutils installed"
+
+    # =====================
+    # Install FASTX-Toolkit
+    # =====================
+    echo "Installing FASTX-Toolkit..."
+    cd /opt/tools
+    wget https://github.com/agordon/fastx_toolkit/releases/download/0.0.14/fastx_toolkit-0.0.14.tar.bz2
+    tar -xjf fastx_toolkit-0.0.14.tar.bz2
+    cd fastx_toolkit-0.0.14
+    # Patch for implicit-fallthrough warnings in modern gcc
+    find . -name "*.cpp" -exec sed -i '/usage();$/a\                        break;' {} \;
+    export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
+    export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    ./configure --prefix=/usr/local
+    make && make install
+    cd /opt/tools
+    rm -rf fastx_toolkit-0.0.14.tar.bz2 fastx_toolkit-0.0.14
+    echo "FASTX-Toolkit installed"
+
+    # =====================
+    # Install SortMeRNA v4.3.6 (self-extracting installer)
+    # =====================
+    echo "Installing SortMeRNA v4.3.6..."
+    cd /opt/tools
+    mkdir -p /opt/tools/sortmerna
+    wget https://github.com/biocore/sortmerna/releases/download/v4.3.6/sortmerna-4.3.6-Linux.sh
+    bash sortmerna-4.3.6-Linux.sh --skip-license --prefix=/opt/tools/sortmerna
+    ln -s /opt/tools/sortmerna/bin/sortmerna /opt/tools/bin/sortmerna
+    rm -f sortmerna-4.3.6-Linux.sh
+    echo "SortMeRNA v4.3.6 installed"
+
+    # =====================
     # Create wrapper scripts
     # =====================
     
@@ -346,6 +438,17 @@ EOF
     chmod +x /opt/tools/bin/picard
     
     # =====================
+    # Verify FastQ Screen Genomes
+    # =====================
+    echo "Verifying FastQ Screen genomes..."
+    if [ -d "/opt/fastq_screen_genomes" ]; then
+        echo "FastQ Screen genomes found at /opt/fastq_screen_genomes"
+        ls -la /opt/fastq_screen_genomes/
+    else
+        echo "WARNING: FastQ Screen genomes directory not found!"
+    fi
+    
+    # =====================
     # Cleanup
     # =====================
     apt-get clean
@@ -355,7 +458,7 @@ EOF
 
 %runscript
     echo "========================================="
-    echo "Conterminator v1.1 Container"
+    echo "Conterminator v1.2 Container"
     echo "========================================="
     echo ""
     echo "Installed Tools and Versions:"
@@ -364,6 +467,7 @@ EOF
     echo "Samtools:       $(samtools --version 2>&1 | grep -m1 '^samtools' | awk '{print $2}')"
     echo "FastQC:         $(fastqc --version 2>&1 | grep Fast)"
     echo "FastQ Screen:   $(fastq_screen --version 2>&1 | grep Fast | grep -oP 'v\K[\d\.]+' || echo '0.16.0')"
+    echo "Bowtie2:        $(bowtie2 --version 2>&1 | head -1 | awk '{print $3}')"
     echo "Qualimap:       $(qualimap bamqc --version 2>&1 | grep -oP 'QualiMap v\.\K[\d\.]+')"
     echo "Picard:         $(java -jar /opt/tools/picard/picard.jar CollectGcBiasMetrics --version 2>&1 | grep -v '^Picked up' | grep -oP 'Version:\s*\K[\d\.]+')"
     echo "DeepTools:      $(deeptools --version 2>&1 | awk '{print $2}')"
@@ -377,6 +481,7 @@ EOF
     echo "Python:         $(python3 --version 2>&1 | awk '{print $2}')"
     echo "R:              $(R --version 2>&1 | grep 'R version' | awk '{print $3}')"
     echo ""
+    echo "FastQ Screen:   Genomes embedded at /opt/fastq_screen_genomes"
     echo "========================================="
     echo "Usage: singularity exec conterminator.sif <tool> --help"
     echo "========================================="
@@ -393,6 +498,16 @@ EOF
     # Test STAR (2.7.11b)
     echo -n "Testing STAR... "
     VERSION=$(STAR --version 2>&1 | head -1)
+    if [ -n "$VERSION" ]; then
+        echo "OK - $VERSION"
+    else
+        echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test Bowtie2 (2.5.4)
+    echo -n "Testing Bowtie2... "
+    VERSION=$(bowtie2 --version 2>&1 | head -1 | awk '{print $3}')
     if [ -n "$VERSION" ]; then
         echo "OK - $VERSION"
     else
@@ -427,6 +542,24 @@ EOF
         echo "OK - $VERSION"
     else
         echo "FAILED"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test FastQ Screen Config
+    echo -n "Testing FastQ Screen Config... "
+    if [ -f "/opt/tools/fastq_screen.conf" ]; then
+        echo "OK - Config file exists"
+    else
+        echo "FAILED - Config file missing"
+        FAILED=$((FAILED+1))
+    fi
+
+    # Test FastQ Screen Genomes
+    echo -n "Testing FastQ Screen Genomes... "
+    if [ -d "/opt/fastq_screen_genomes" ]; then
+        echo "OK - Genomes directory exists"
+    else
+        echo "FAILED - Genomes directory missing"
         FAILED=$((FAILED+1))
     fi
 
@@ -538,7 +671,8 @@ EOF
     # Test R
     echo -n "Testing R... "
     R_OUTPUT=$(R --version)
-    if echo "$R_OUTPUT" | grep -q 'R version'; then
+    if echo "$R_OUTPUT" | grep -q 'R version';
+        then
         VERSION=$(echo -e "$R_OUTPUT" | grep -oP 'R version \K[\d\.]+')
         echo "OK - $VERSION"
     else

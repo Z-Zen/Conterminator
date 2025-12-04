@@ -116,7 +116,6 @@ params.max_parallel_samples   = 4
 
 // FastQ Screen conf
 params.fastq_screen_conf   = "/mnt/sas/Tools/FastQ-Screen-0.16.0/FastQ_Screen_Genomes/fastq_screen.conf"
-params.fastq_screen_threads = 8
 
 // Plotting and reporting
 params.gc_plot_script         =  "${projectDir}/bin/R/plot_gc_content.R"
@@ -198,7 +197,6 @@ def helpMessage() {
       --run_fastqc                Run FastQC on input FASTQs (default: true)
       --run_fastq_screen          Run FastQ Screen (default: true)
       --fastq_screen_conf         FastQ Screen config file (default: provided)
-      --fastq_screen_threads      FastQ Screen threads (default: 8)
       
       --run_deeptools             Run DeepTools GC bias (default: true)
       --run_picard_gc             Run Picard GC bias (default: true)
@@ -707,6 +705,7 @@ def SEQTK_BIN = usingSingularity ? "/opt/tools/bin/seqtk" : params.seqtk_bin
 // QC tools
 def FASTQC_BIN = usingSingularity ? "/opt/tools/bin/fastqc" : params.fastqc_bin
 def FASTQ_SCREEN_BIN = usingSingularity ? "/opt/tools/bin/fastq_screen" : params.fastq_screen
+def FASTQ_SCREEN_CONF = usingSingularity ? "/opt/tools/fastq_screen.conf" : params.fastq_screen_conf
 def QUALIMAP_BIN = usingSingularity ? "/opt/tools/bin/qualimap" : params.qualimap_bin
 
 // Analysis tools
@@ -1653,7 +1652,7 @@ process FASTQ_SCREEN {
     """
     set -euo pipefail
     ${FASTQ_SCREEN_BIN} \\
-        --conf ${params.fastq_screen_conf} \\
+        --conf ${FASTQ_SCREEN_CONF} \\
         --threads ${task.cpus} \\
         --outdir . \\
         --force \\
