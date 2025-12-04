@@ -1188,39 +1188,57 @@ process PREP_STRAIN_REFERENCE_FOR_QC {
           path("${strain}.gtf.gz"), emit: qc_references
     
     script:
-    def standard_strains = ['GRCm39']
-    def gtf_source = standard_strains.contains(strain) ?
-        "${params.standard_references_dir}/${strain}/*.gtf.gz" :
-        "${params.strains_base_dir}/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
-    
     """
-    # Copy/link FASTA
-    ln -s ${fasta} ${strain}.fa
+    set -euo pipefail
+    
+    # Decompress FASTA if needed (samtools can't index gzipped files with regular gzip)
+    echo "Processing FASTA file: ${fasta}"
+    if [[ ${fasta} == *.gz ]]; then
+        echo "Decompressing FASTA..."
+        gunzip -c ${fasta} > ${strain}.fa
+    else
+        echo "Linking uncompressed FASTA..."
+        ln -s ${fasta} ${strain}.fa
+    fi
     
     # Index FASTA
-    ${SAMTOOLS_BIN} faidx ${strain}.fa
+    echo "Indexing FASTA..."
+    ${SAMTOOLS_BIN} faidx -@ ${task.cpus} ${strain}.fa
     
     # Create sequence dictionary
+    echo "Creating sequence dictionary..."
     ${SAMTOOLS_BIN} dict ${strain}.fa > ${strain}.dict
     
     # Create BED file from FAI
+    echo "Creating BED file..."
     awk '{print \$1"\\t0\\t"\$2}' ${strain}.fa.fai > ${strain}.bed
     
     # Calculate effective genome size
+    echo "Calculating effective genome size..."
     ${FACOUNT_BIN} ${strain}.fa > ${strain}.faCount.txt
     awk 'NR>1 {total+=\$2; n+=\$3+\$4+\$5+\$6} END {print total-n}' ${strain}.faCount.txt > ${strain}.txt
     
     # Create 2bit file
+    echo "Creating 2bit file..."
     ${FA2BIT_BIN} ${strain}.fa ${strain}.2bit
     
-    # Copy/stage GTF file
-    GTF_FILES=(${gtf_source})
-    if [ -f "\${GTF_FILES[0]}" ]; then
-        cp "\${GTF_FILES[0]}" ${strain}.gtf.gz
+    # Handle GTF file (already staged as input)
+    echo "Processing GTF file: ${gtf}"
+    if [[ ${gtf} == *.gz ]]; then
+        # Already compressed
+        if [[ ${gtf} == ${strain}.gtf.gz ]]; then
+            echo "GTF already has correct name"
+        else
+            echo "Copying compressed GTF..."
+            cp ${gtf} ${strain}.gtf.gz
+        fi
     else
-        echo "ERROR: GTF file not found: ${gtf_source}"
-        exit 1
+        # Need to compress it
+        echo "Compressing GTF..."
+        gzip -c ${gtf} > ${strain}.gtf.gz
     fi
+    
+    echo "Reference preparation complete for ${strain}"
     """
 }
 
