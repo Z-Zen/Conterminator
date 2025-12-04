@@ -482,7 +482,21 @@ def parseSampleSheet() {
         System.exit(1)
     }
     
-    def lines = sheetFile.readLines()
+    // Read file and normalize line endings (handle both LF and CRLF)
+    def content = sheetFile.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
+    def lines = content.split('\n').findAll { it.trim() }  // Split and remove empty lines
+    
+    if (lines.size() < 2) {
+        println """
+        ========================================
+        ERROR: Sample sheet is empty or has no data rows
+        ========================================
+        The sample sheet must contain a header row and at least one data row.
+        ========================================
+        """
+        System.exit(1)
+    }
+    
     def header = lines[0].split('\t')
 
     // Check for 5 columns: sample, strain, type, read1, read2
@@ -513,7 +527,9 @@ def parseSampleSheet() {
 
     // Store strain, type, and file paths
     lines[1..-1].each { line ->
-        if (line.trim() && !line.startsWith('#')) {
+        // Skip empty lines and comments
+        def trimmedLine = line.trim()
+        if (trimmedLine && !trimmedLine.startsWith('#')) {
             def fields = line.split('\t')
             if (fields.size() >= 4) {
                 def sample = fields[0].trim()
@@ -549,6 +565,17 @@ def parseSampleSheet() {
                 sampleSheet[sample] = [strain: strain, type: type, read1: read1, read2: read2]
             }
         }
+    }
+    
+    if (sampleSheet.isEmpty()) {
+        println """
+        ========================================
+        ERROR: No valid samples found in sample sheet
+        ========================================
+        Please check that your sample sheet has at least one valid data row.
+        ========================================
+        """
+        System.exit(1)
     }
     
     return sampleSheet
