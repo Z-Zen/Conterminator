@@ -104,9 +104,9 @@ git clone git@gitlab.epfl.ch:abadreddine/conterminator.git
 cd conterminator
 ```
 
-If the above command didn't work, make sure you have added your SSH key to gitlab. You can do it using the following commands:
+If the above command didn't work, make sure you have added your SSH key to gitlab. You can do it using the following commands (replace `example.email@epfl.ch` by your EPFL email):
 ```bash
-ssh-keygen -t ed25519 -C "aleksandar.mihaylov@epfl.ch" -f ~/.ssh/id_ed25519_epfl
+ssh-keygen -t ed25519 -C "example.email@epfl.ch" -f ~/.ssh/id_ed25519_epfl
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519_epfl
 cat ~/.ssh/id_ed25519_epfl.pub
