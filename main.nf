@@ -13,7 +13,7 @@ params.sample_sheet             = null
 params.fastq_pattern            = null
 
 // FLEXIBLE FastQ SUBSETTING
-params.subset_for_fastq_qc      = true      // Subset for FastQ Screen
+params.subset_for_fastq_qc      = false      // Subset for FastQ Screen
 params.subset_fastq_qc_reads    = 100000    // Size for FastQ QC (100k reads)
 params.subset_for_star          = false     // Use full FastQ for STAR alignment
 params.subset_star_reads        = 100000    // Size for STAR if subsampling (100k reads)
@@ -21,16 +21,13 @@ params.subset_seed              = 100       // Random seed for reproducibility
 
 // STAR alignment
 params.run_star_alignment       = true
-params.star_threads             = 20
 params.strain                   = null
 params.strains_base_dir         = "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes"
 params.standard_references_dir  = "/mnt/sas/Data/References/Mus"  // For standard reference genomes like GRCm39, GRCm38
 params.star_index_dir           = "/mnt/sas/Data/References/Mus"
-params.star_index_threads       = 20
-params.star_index_mem           = "32 GB"
 
 // BAM SUBSETTING FOR QC TOOLS
-params.subset_bam_for_qc                 = true      // Subset BAMs for QC tools
+params.subset_bam_for_qc                 = false      // Subset BAMs for QC tools
 params.bam_qc_subset_mapped              = 200000   // Mapped reads for QC (200k reads)
 
 // READS SUBSETTING
@@ -46,7 +43,7 @@ params.run_deeptools           = true
 params.run_picard_gc           = true
 params.run_fastq_screen        = true
 params.run_bedtools_gc         = true
-params.run_decontaminer        = true
+params.run_decontaminer        = false
 params.run_mapinsights         = true
 params.run_contamination_check = true
 params.run_fastqc              = true
@@ -103,16 +100,7 @@ params.reformat_bin       = "/mnt/sas/Tools/bbmap/reformat.sh"
 params.run_qualimap       = true
 params.qualimap_mode      = "both"
 params.qualimap_genome    = "mm10"
-params.qualimap_java_mem  = "10G"
-params.qualimap_threads   = 8
-params.qualimap_skip_dup  = false
 params.qualimap_protocol  = "strand-specific-reverse"
-
-// Resources
-params.max_cpus               = 16
-params.max_mem                = "32 GB"
-params.max_time               = "24h"
-params.max_parallel_samples   = 4
 
 // FastQ Screen conf
 params.fastq_screen_conf   = "/mnt/sas/Tools/FastQ-Screen-0.16.0/FastQ_Screen_Genomes/fastq_screen.conf"
@@ -170,9 +158,6 @@ def helpMessage() {
       --run_star_alignment        Enable STAR alignment (default: true)
       --strain <strain(s)>        Comma-separated strain list (alternative to sample sheet)
                                   Example: "C57BL_6J,DBA_2J"
-      --star_threads <int>        STAR alignment threads (default: 20)
-      --star_index_threads <int>  STAR index building threads (default: 20)
-      --star_index_mem <string>   STAR index memory (default: "32 GB")
     
     SUBSAMPLING OPTIONS (Performance Tuning):
       --subset_for_fastq_qc       Subsample FASTQs for QC (default: true)
@@ -210,10 +195,7 @@ def helpMessage() {
       --run_qualimap              Run Qualimap (default: true)
       --qualimap_mode             Qualimap mode: "bamqc", "rnaseq", or "both" (default: "both")
       --qualimap_genome           Reference genome name (default: "mm10")
-      --qualimap_java_mem         Java memory allocation (default: "10G")
-      --qualimap_threads          Qualimap threads (default: 8)
       --qualimap_protocol         Protocol type (default: "strand-specific-reverse")
-      --qualimap_skip_dup         Skip duplicates (default: false)
     
     CONTAMINATION ANALYSIS:
       --run_contamination_check   Enable contamination checking (default: true)
@@ -223,7 +205,6 @@ def helpMessage() {
       --contamination_gc_min      GC content minimum (default: 0.60)
       --contamination_gc_max      GC content maximum (default: 1.0)
       --contamination_mapq        MAPQ threshold (default: 10)
-      --blast_max_parallel        Max parallel BLAST jobs (default: 10)
       
       --run_decontaminer          Run DecontaMiner (default: true)
       --decontaminer_dir          DecontaMiner installation directory
@@ -238,12 +219,6 @@ def helpMessage() {
       --run_multiqc               Run MultiQC (default: true)
       --run_blast_plots           Generate BLAST plots (default: true)
       --multiqc_config            MultiQC config file (default: null)
-    
-    RESOURCES:
-      --max_cpus <int>            Maximum CPUs (default: 16)
-      --max_mem <string>          Maximum memory (default: "32 GB")
-      --max_time <string>         Maximum time (default: "24h")
-      --max_parallel_samples      Maximum parallel samples (default: 4)
     
     DEFAULT RUN (Recommended Settings):
        
@@ -262,105 +237,10 @@ def helpMessage() {
        References are automatically prepared per-strain from the strains_base_dir
     
     ========================================
-    SAMPLE SHEET FORMAT
-    ========================================
-    
-    Tab-separated file (TSV) with header:
-    
-    sample	strain	path
-    sample1	C57BL_6J	/data/fastq/sample1/
-    sample2	DBA_2J	/data/fastq/sample2/
-    sample3	C57BL_6J	/data/fastq/sample3/
-    
-    Required columns:
-    - sample: Unique sample identifier
-    - strain: Reference strain name (must exist in strains_base_dir)
-    - path: Directory containing paired-end FastQ files
-    
-    Notes:
-    - Header row is mandatory
-    - Each sample is aligned to its specified strain
-    - FastQ pattern will be auto-detected (or use --fastq_pattern)
-    - Supported patterns: *_{1,2}.fq.gz, *_{R1,R2}.fastq.gz, etc.
-    
-    ========================================
-    PERFORMANCE TIPS
-    ========================================
-    
-    1. For testing/development:
-       - Use heavy subsampling (10K-50K reads)
-       - Disable slow tools if not needed
-    
-    2. For production with many samples:
-       - Use default subsampling (balances speed/accuracy)
-       - Adjust --max_parallel_samples based on resources
-       - Consider --blast_max_parallel for BLAST jobs
-    
-    3. For comprehensive analysis:
-       - Disable subsampling for critical samples
-       - Increase resource allocations (--max_cpus, --max_mem)
-       - Enable all QC tools
-    
-    4. For contamination-focused runs:
-       - Keep BLAST/DecontaMiner enabled
-       - Disable unnecessary BAM QC tools
-       - Use moderate subsampling on unmapped reads
-    
-    ========================================
-    TOOL PATHS
-    ========================================
-    
-    All tool paths are pre-configured in nextflow.config.
-    Override if needed using command line parameters:
-    
-      --samtools_bin <path>
-      --star_bin <path>
-      --blastn_bin <path>
-      --fastqc_bin <path>
-      (and more... see nextflow.config)
-    
-    ========================================
-    EXECUTION PROFILES
-    ========================================
-    
-    Run with different execution modes:
-    
-      nextflow run main.nf -profile local      # Local execution
-      nextflow run main.nf -profile cluster    # SLURM cluster
-      nextflow run main.nf -profile singularity # With containers
-    
-    ========================================
-    OUTPUT STRUCTURE
-    ========================================
-    
-    results/
-    ├── Input
-    │   ├── reference
-    │   ├── strain_references
-    │   ├── subsampled_bams
-    │   ├── subsampled_fastq
-    │   ├── subsampled_unmapped_blast
-    │   └── subsampled_unmapped_decontaminer
-    ├── Output
-    │   ├── bedtools_gc
-    │   ├── contamination_check
-    │   ├── decontaminer
-    │   ├── deeptools_gc_bias
-    │   ├── fastqc
-    │   ├── fastq_screen
-    │   ├── mapinsights
-    │   ├── multiqc
-    │   ├── picard_gc_bias
-    │   └── qualimap
-    └── Temporary
-        ├── decontaminer
-        └── star_alignment
-    
-    ========================================
     MORE INFORMATION
     ========================================
     
-    Project: Conterminator v1.1
+    Project: Conterminator v1.2
     Author:  Alaa Badreddine
     Home:    https://gitlab.epfl.ch/abadreddine/conterminator
     
@@ -482,21 +362,7 @@ def parseSampleSheet() {
         System.exit(1)
     }
     
-    // Read file and normalize line endings (handle both LF and CRLF)
-    def content = sheetFile.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
-    def lines = content.split('\n').findAll { it.trim() }  // Split and remove empty lines
-    
-    if (lines.size() < 2) {
-        println """
-        ========================================
-        ERROR: Sample sheet is empty or has no data rows
-        ========================================
-        The sample sheet must contain a header row and at least one data row.
-        ========================================
-        """
-        System.exit(1)
-    }
-    
+    def lines = sheetFile.readLines()
     def header = lines[0].split('\t')
 
     // Check for 5 columns: sample, strain, type, read1, read2
@@ -527,9 +393,7 @@ def parseSampleSheet() {
 
     // Store strain, type, and file paths
     lines[1..-1].each { line ->
-        // Skip empty lines and comments
-        def trimmedLine = line.trim()
-        if (trimmedLine && !trimmedLine.startsWith('#')) {
+        if (line.trim() && !line.startsWith('#')) {
             def fields = line.split('\t')
             if (fields.size() >= 4) {
                 def sample = fields[0].trim()
@@ -565,17 +429,6 @@ def parseSampleSheet() {
                 sampleSheet[sample] = [strain: strain, type: type, read1: read1, read2: read2]
             }
         }
-    }
-    
-    if (sampleSheet.isEmpty()) {
-        println """
-        ========================================
-        ERROR: No valid samples found in sample sheet
-        ========================================
-        Please check that your sample sheet has at least one valid data row.
-        ========================================
-        """
-        System.exit(1)
     }
     
     return sampleSheet
@@ -732,7 +585,6 @@ def SEQTK_BIN = usingSingularity ? "/opt/tools/bin/seqtk" : params.seqtk_bin
 // QC tools
 def FASTQC_BIN = usingSingularity ? "/opt/tools/bin/fastqc" : params.fastqc_bin
 def FASTQ_SCREEN_BIN = usingSingularity ? "/opt/tools/bin/fastq_screen" : params.fastq_screen
-def FASTQ_SCREEN_CONF = usingSingularity ? "/opt/tools/fastq_screen.conf" : params.fastq_screen_conf
 def QUALIMAP_BIN = usingSingularity ? "/opt/tools/bin/qualimap" : params.qualimap_bin
 
 // Analysis tools
@@ -1172,73 +1024,50 @@ process STAR_ALIGN {
 // Reference preparation for QC tools
 process PREP_STRAIN_REFERENCE_FOR_QC {
     tag "${strain}"
-    publishDir "${params.outdir}/References/${strain}", mode: 'copy'
-    
+    publishDir "${params.outdir}/Input/strain_references/${strain}", mode: 'copy'
+
     input:
-    tuple val(strain), path(fasta), path(gtf)
-    
+    tuple val(strain), path(fasta_gz), path(gtf)
+
     output:
-    tuple val(strain), 
-          path("${strain}.fa"), 
-          path("${strain}.fa.fai"), 
-          path("${strain}.dict"), 
-          path("${strain}.bed"), 
-          path("${strain}.txt"), 
-          path("${strain}.2bit"),
-          path("${strain}.gtf.gz"), emit: qc_references
-    
+    tuple val(strain), path("${strain}.fa"), path("${strain}.fa.fai"), path("${strain}.dict"), path("${strain}.bed"), path("${strain}_effective_size.txt"), path("${strain}.2bit"), path("${strain}_annotation.gtf.gz"), emit: qc_references
+
     script:
     """
     set -euo pipefail
-    
-    # Decompress FASTA if needed (samtools can't index gzipped files with regular gzip)
-    echo "Processing FASTA file: ${fasta}"
-    if [[ ${fasta} == *.gz ]]; then
-        echo "Decompressing FASTA..."
-        gunzip -c ${fasta} > ${strain}.fa
-    else
-        echo "Linking uncompressed FASTA..."
-        ln -s ${fasta} ${strain}.fa
-    fi
-    
-    # Index FASTA
-    echo "Indexing FASTA..."
+
+    echo "Preparing QC references for strain: ${strain}"
+
+    # Decompress fasta
+    zcat ${fasta_gz} > ${strain}.fa
+
+    # Create fasta index
     ${SAMTOOLS_BIN} faidx -@ ${task.cpus} ${strain}.fa
-    
+
     # Create sequence dictionary
-    echo "Creating sequence dictionary..."
     ${SAMTOOLS_BIN} dict ${strain}.fa > ${strain}.dict
-    
-    # Create BED file from FAI
-    echo "Creating BED file..."
-    awk '{print \$1"\\t0\\t"\$2}' ${strain}.fa.fai > ${strain}.bed
-    
+
+    # Create BED file from fai
+    awk 'BEGIN{OFS="\\t"} {print \$1, 0, \$2}' ${strain}.fa.fai > ${strain}.bed
+
     # Calculate effective genome size
-    echo "Calculating effective genome size..."
-    ${FACOUNT_BIN} ${strain}.fa > ${strain}.faCount.txt
-    awk 'NR>1 {total+=\$2; n+=\$3+\$4+\$5+\$6} END {print total-n}' ${strain}.faCount.txt > ${strain}.txt
-    
-    # Create 2bit file
-    echo "Creating 2bit file..."
-    ${FA2BIT_BIN} ${strain}.fa ${strain}.2bit
-    
-    # Handle GTF file (already staged as input)
-    echo "Processing GTF file: ${gtf}"
-    if [[ ${gtf} == *.gz ]]; then
-        # Already compressed
-        if [[ ${gtf} == ${strain}.gtf.gz ]]; then
-            echo "GTF already has correct name"
-        else
-            echo "Copying compressed GTF..."
-            cp ${gtf} ${strain}.gtf.gz
-        fi
+    ${FACOUNT_BIN} ${strain}.fa > ${strain}.facount.txt
+    awk 'BEGIN{len=0; n=0} \$1=="total"{len=\$2; n=\$7} END{print len-n}' ${strain}.facount.txt > ${strain}_effective_size.txt
+    echo "Effective genome size for ${strain}: \$(cat ${strain}_effective_size.txt)" >&2
+
+    # Create 2bit file if deeptools is enabled
+    if [[ "${params.run_deeptools}" == "true" ]]; then
+        ${FA2BIT_BIN} ${strain}.fa ${strain}.2bit
     else
-        # Need to compress it
-        echo "Compressing GTF..."
-        gzip -c ${gtf} > ${strain}.gtf.gz
+        # Create empty placeholder
+        touch ${strain}.2bit
     fi
-    
-    echo "Reference preparation complete for ${strain}"
+
+    if [[ "${gtf}" != "${strain}_annotation.gtf.gz" ]]; then
+        cp ${gtf} ${strain}_annotation.gtf.gz
+    fi
+
+    echo "QC references prepared for ${strain}"
     """
 }
 
@@ -1552,7 +1381,7 @@ process QUALIMAP_BAMQC {
     publishDir "${params.outdir}/Output/qualimap/${sample}/bamqc", mode: 'copy'
 
     input:
-    tuple val(sample), val(strain), path(bam), path(bai), val(bam_type), path(gtf)  // GTF as input
+    tuple val(sample), val(strain), path(bam), path(bai), val(bam_type)
     path ref
 
     output:
@@ -1565,16 +1394,19 @@ process QUALIMAP_BAMQC {
     params.run_qualimap && (params.qualimap_mode == "bamqc" || params.qualimap_mode == "both")
 
     script:
+    // Check if strain is a standard reference
+    def standard_strains = ['GRCm39']
+    def gtf = standard_strains.contains(strain) ?
+        "${params.standard_references_dir}/${strain}/*.gtf.gz" :
+        "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes/${strain}/HDP_merge_splitnorm_v1__pseudogenome__strain_${strain}.gtf.gz"
     """
     set -euo pipefail
 
-    # Decompress GTF if needed
     if [[ ${gtf} == *.gz ]]; then
         zcat ${gtf} > ${strain}_annotation.gtf
         GTF_FILE="${strain}_annotation.gtf"
     else
-        cp ${gtf} ${strain}_annotation.gtf
-        GTF_FILE="${strain}_annotation.gtf"
+        GTF_FILE="${gtf}"
     fi
     
     ${QUALIMAP_BIN} bamqc \\
@@ -1699,7 +1531,7 @@ process FASTQ_SCREEN {
     """
     set -euo pipefail
     ${FASTQ_SCREEN_BIN} \\
-        --conf ${FASTQ_SCREEN_CONF} \\
+        --conf ${params.fastq_screen_conf} \\
         --threads ${task.cpus} \\
         --outdir . \\
         --force \\
@@ -2784,14 +2616,12 @@ workflow {
                     .groupTuple(by: 0)
                     .flatMap { key, ids, strains, bams, bais, types, fas, gtfs ->
                         [ids, strains, bams, bais, types].transpose().collect { id, strain, bam, bai, type ->
-                            tuple(id, strain, bam, bai, type, fas[0], gtfs[0])  // Include GTF here
+                            tuple(id, strain, bam, bai, type, fas[0])
                         }
                     }
                     .set { qualimap_grouped }
-                QUALIMAP_BAMQC(
-                    qualimap_grouped.map { id, strain, bam, bai, type, fa, gtf -> tuple(id, strain, bam, bai, type, gtf) },  // Pass GTF
-                    qualimap_grouped.first().map { id, strain, bam, bai, type, fa, gtf -> fa }
-                )
+                QUALIMAP_BAMQC(qualimap_grouped.map { id, strain, bam, bai, type, fa -> tuple(id, strain, bam, bai, type) },
+                                qualimap_grouped.first().map { id, strain, bam, bai, type, fa -> fa })
                 ran_qualimap_bamqc = true
             }
 
@@ -3134,11 +2964,11 @@ workflow.onComplete {
     ${params.strain ? "Strains:  ${params.strain}" : ''}${singularityInfo}
 
     SUBSAMPLING SUMMARY:
-    ${params.subset_for_fastq_qc ? "  FastQ QC: ${params.subset_fastq_qc_reads} reads" : "  X FastQ QC: Full FASTQs"}
-    ${params.subset_for_star ? "  STAR: ${params.subset_star_reads} reads" : "  X STAR: Full FASTQs"}
-    ${params.subset_bam_for_qc ? "  BAM QC: ${params.bam_qc_subset_mapped} reads" : "  X BAM QC: Full BAMs"}
-    ${params.subset_unmapped_for_blast ? "  BLAST: ${params.unmapped_subset_reads} reads" : "  X BLAST: Full unmapped"}
-    ${params.subset_unmapped_for_decontaminer ? "  DecontaMiner: ${params.unmapped_subset_reads} reads" : "  X DecontaMiner: Full unmapped"}
+    ${params.subset_for_fastq_qc ? "  ✓ FastQ QC: ${params.subset_fastq_qc_reads} reads" : "  X FastQ QC: Full FASTQs"}
+    ${params.subset_for_star ? "  ✓ STAR: ${params.subset_star_reads} reads" : "  X STAR: Full FASTQs"}
+    ${params.subset_bam_for_qc ? "  ✓ BAM QC: ${params.bam_qc_subset_mapped} reads" : "  X BAM QC: Full BAMs"}
+    ${params.subset_unmapped_for_blast ? "  ✓ BLAST: ${params.unmapped_subset_reads} reads" : "  X BLAST: Full unmapped"}
+    ${params.subset_unmapped_for_decontaminer ? "  ✓ DecontaMiner: ${params.unmapped_subset_reads} reads" : "  X DecontaMiner: Full unmapped"}
 
     ${params.run_multiqc ? "To generate MultiQC report:\n    cd ${params.outdir} && multiqc . --force" : ''}
     ========================================
