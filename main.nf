@@ -1939,51 +1939,31 @@ process BLAST_MAPPED_READS_MULTI {
         -num_threads ${task.cpus} \\
         -max_target_seqs 5 \\
         -max_hsps 1
-    
-    echo "1"
 
     # Combine results
     cat ${sample}_${db_name}_R1.blast.tsv ${sample}_${db_name}_R2.blast.tsv > ${sample}_${db_name}.blast.tsv
-
-    echo "2"
     
     BLAST_HITS=\$(wc -l < ${sample}_${db_name}.blast.tsv)
     echo "Total BLAST hits (R1+R2): \$BLAST_HITS" >> ${sample}_${db_name}.blast_summary.txt
-
-    echo "3"
     
     if [ "\$BLAST_HITS" -gt 0 ]; then
         echo "" >> ${sample}_${db_name}.blast_summary.txt
         echo "TOP CONTAMINATING SEQUENCES/STRAINS:" >> ${sample}_${db_name}.blast_summary.txt
-
-        echo "33"
         
         if [[ "${db_name}" == *"mus_strain"* ]]; then
-            echo "333"
             cut -f2 ${sample}_${db_name}.blast.tsv | sed 's/gnl|//; s/|.*//' | sort | uniq -c | sort -rn | head -20 >> ${sample}_${db_name}.blast_summary.txt
-            echo "333"
             cut -f2 ${sample}_${db_name}.blast.tsv | sed 's/gnl|//; s/|.*//' | sort | uniq -c | sort -rn | head -50 > ${sample}_${db_name}.top_contaminants.txt
-            echo "333"
         else
-            echo "3333"
             cut -f13 ${sample}_${db_name}.blast.tsv | sort | uniq -c | sort -rn | head -20 >> ${sample}_${db_name}.blast_summary.txt
-            echo "3333"
             cut -f13 ${sample}_${db_name}.blast.tsv | sort | uniq -c | sort -rn | head -50 > ${sample}_${db_name}.top_contaminants.txt
-            echo "3333"
         fi
     else
         echo "No contamination detected" > ${sample}_${db_name}.top_contaminants.txt
     fi
-
-    echo "4"
     
     echo "BLAST analysis complete for ${sample} vs ${db_name}" >&2
 
-    echo "5"
-
     rm -f ${sample}_R1.fasta ${sample}_R2.fasta ${sample}_mapped_R1.fastq ${sample}_mapped_R2.fastq
-
-    echo "6"
     """
 }
 
