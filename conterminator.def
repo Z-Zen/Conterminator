@@ -15,7 +15,7 @@ From: ubuntu:22.04
     /mnt/sas/Tools/FastQ-Screen-0.16.0/FastQ_Screen_Genomes /opt/fastq_screen_genomes
 
 %help
-    Conterminator v1.2 - RNA-seq QC and Contamination Detection Pipeline
+    Conterminator v1.3 - RNA-seq QC and Contamination Detection Pipeline
 
     This container includes all required bioinformatics tools:
     - STAR aligner (2.7.11b)
@@ -458,7 +458,7 @@ EOF
 
 %runscript
     echo "========================================="
-    echo "Conterminator v1.2 Container"
+    echo "Conterminator v1.3 Container"
     echo "========================================="
     echo ""
     echo "Installed Tools and Versions:"

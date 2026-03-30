@@ -209,7 +209,7 @@ def helpMessage() {
     MORE INFORMATION
     ========================================
     
-    Project: Conterminator v1.2
+    Project: Conterminator v1.3
     Author:  Alaa Badreddine
     Home:    https://gitlab.epfl.ch/abadreddine/conterminator
     
