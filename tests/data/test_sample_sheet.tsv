@@ -1,0 +1,2 @@
+sample	strain	type	read1	read2
+test_sample1	TestRef	fastq	TESTDIR/test_R1.fastq.gz	TESTDIR/test_R2.fastq.gz

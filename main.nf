@@ -22,9 +22,9 @@ params.subset_seed              = 100       // Random seed for reproducibility
 // STAR alignment
 params.run_star_alignment       = true
 params.strain                   = null
-params.strains_base_dir         = "${params.user_home_dir}/rcp_storage/common/Users/vonalven/HDP_pseudogenomes_construction/Data/HPC_results/HDP_pseudogenomes"
-params.standard_references_dir  = "/mnt/sas/Data/References/Mus"  // For standard reference genomes like GRCm39, GRCm38
-params.star_index_dir           = "/mnt/sas/Data/References/Mus"
+params.strains_base_dir         = null      // Directory with strain-specific pseudogenomes (required for STAR)
+params.standard_references_dir  = null      // Directory with standard reference genomes (e.g., GRCm39, GRCm38)
+params.star_index_dir           = null      // Directory for STAR indices
 
 // BAM SUBSETTING FOR QC TOOLS
 params.subset_bam_for_qc                 = false      // Subset BAMs for QC tools
@@ -33,17 +33,14 @@ params.bam_qc_subset_mapped              = 200000   // Mapped reads for QC (200k
 // READS SUBSETTING
 params.subset_unmapped_for_blast         = true   // Subset for BLAST
 params.subset_mapped_for_blast           = true   // Subset for BLAST
-params.subset_unmapped_for_decontaminer  = true   // Subset for DecontaMiner
-params.subset_mapped_for_decontaminer    = true   // Subset for DecontaMiner
 params.unmapped_subset_reads             = 100000 // Unmapped reads to keep (100k reads)
-params.mapped_subset_reads               = 100000 // Unmapped reads to keep (100k reads)
+params.mapped_subset_reads               = 100000 // Mapped reads to keep (100k reads)
 
 // Tool toggles
 params.run_deeptools           = true
 params.run_picard_gc           = true
 params.run_fastq_screen        = true
 params.run_bedtools_gc         = true
-params.run_decontaminer        = false
 params.run_mapinsights         = true
 params.run_contamination_check = true
 params.run_fastqc              = true
@@ -55,46 +52,31 @@ params.blacklist_bed      = null
 params.windowsize         = 500
 params.window_step        = 250
 
-// DecontaMiner settings
-// Use container paths when running with Singularity, host paths otherwise
-params.decontaminer_dir             = "/mnt/sas/Tools/decontaminer-RNAseq/decontaMiner_1.4"
-params.decontaminer_config          = "/mnt/sas/Tools/decontaminer-RNAseq/decontaMiner_1.4/config_files/configure.txt"
-params.decontaminer_pairing         = "P"
-params.decontaminer_organisms       = "bfv"
-params.decontaminer_format          = "bam"
-params.decontaminer_quality_filter  = "yes"
-params.decontaminer_ribo_filter     = "yes"
-params.decontaminer_gap             = 5
-params.decontaminer_mismatch        = 10
-params.decontaminer_match_len       = 50
-params.decontaminer_match_threshold = 5
-params.decontaminer_generate_plots  = true
-
 // Contamination check
 params.contamination_gc_min    = 0.60
 params.contamination_gc_max    = 1.0
 params.contamination_mapq      = 10
-params.contamination_blast_dbs = "/mnt/sas/Tools/blast_databases/"
+params.contamination_blast_dbs = null       // Path to BLAST database directory (required for contamination check)
 params.contamination_evalue    = "1e-10"
 
 // Mapinsights
 params.mapinsights_opts   = ""
 
-// Tool paths
-params.bedtools_bin       = "/mnt/sas/Tools/bedtools2/bin/bedtools"
-params.mapinsights_bin    = "/mnt/sas/Tools/mapinsights/mapinsights"
-params.picard_jar         = "/mnt/sas/Tools/Picard/picard.jar"
-params.samtools_bin       = "/mnt/sas/Tools/samtools-1.22.1/samtools"
-params.blastn_bin         = "/mnt/sas/Tools/ncbi-blast-2.17.0+/bin/blastn"
-params.deeptools_gcbias   = "/mnt/sas/Tools/deepTools/deeptools/computeGCBias.py"
-params.facount_bin        = "/mnt/sas/Tools/faCount/faCount"
-params.fa2bit_bin         = "/mnt/sas/Tools/faToTwoBit/faToTwoBit"
-params.fastq_screen       = "/mnt/sas/Tools/FastQ-Screen-0.16.0/fastq_screen"
-params.qualimap_bin       = "/mnt/sas/Tools/qualimap_v2.3/qualimap"
-params.seqtk_bin          = "/mnt/sas/Tools/seqtk/seqtk"
-params.star_bin           = "/mnt/sas/Tools/STAR_2.7.11b/Linux_x86_64_static/STAR"
-params.fastqc_bin         = "/mnt/sas/Tools/FastQC/fastqc"
-params.reformat_bin       = "/mnt/sas/Tools/bbmap/reformat.sh"
+// Tool paths — set these when running WITHOUT a container (ignored with Singularity)
+params.bedtools_bin       = null
+params.mapinsights_bin    = null
+params.picard_jar         = null
+params.samtools_bin       = null
+params.blastn_bin         = null
+params.deeptools_gcbias   = null
+params.facount_bin        = null
+params.fa2bit_bin         = null
+params.fastq_screen_bin   = null
+params.qualimap_bin       = null
+params.seqtk_bin          = null
+params.star_bin           = null
+params.fastqc_bin         = null
+params.reformat_bin       = null
 
 // Qualimap settings
 params.run_qualimap       = true
@@ -103,7 +85,7 @@ params.qualimap_genome    = "mm10"
 params.qualimap_protocol  = "strand-specific-reverse"
 
 // FastQ Screen conf
-params.fastq_screen_conf   = "/mnt/sas/Tools/FastQ-Screen-0.16.0/FastQ_Screen_Genomes/fastq_screen.conf"
+params.fastq_screen_conf   = null           // FastQ Screen config file (required for fastq_screen)
 
 // Plotting and reporting
 params.gc_plot_script         =  "${projectDir}/bin/R/plot_gc_content.R"
@@ -111,10 +93,9 @@ params.run_blast_plots        = true
 params.blast_plot             = "${projectDir}/bin/py/plot_blast_pie.py"
 params.blast_plot_interac     = "${projectDir}/bin/py/interactive_plot_blast_pie.py"
 params.run_multiqc            = true
-params.multiqc_bin            = "multiqc"
 params.multiqc_config         = null
 
-params.singularity_path = '/absolute/path/to/conterminator.sif'
+params.singularity_path = null
 
 def content = new File('name.txt').text
 
@@ -148,11 +129,9 @@ def helpMessage() {
                                   Examples: "*_{1,2}.fq.gz", "*_{R1,R2}.fastq.gz"
     
     REFERENCE FILES:
-      --strains_base_dir <path>        Directory with strain-specific pseudogenomes
-                                       (default: ${params.user_home_dir}/.../HDP_pseudogenomes)
+      --strains_base_dir <path>        Directory with strain-specific pseudogenomes (required for STAR)
       --standard_references_dir <path> Directory with standard reference genomes (e.g., GRCm39, GRCm38)
-                                       (default: /mnt/sas/Data/References/Mus)
-      --star_index_dir <path>          Directory for STAR indices (default: /mnt/sas/Data/References/Mus)
+      --star_index_dir <path>          Directory for STAR indices (required for STAR)
     
     STAR ALIGNMENT:
       --run_star_alignment        Enable STAR alignment (default: true)
@@ -175,7 +154,6 @@ def helpMessage() {
       --subset_unmapped_for_blast Subsample unmapped for BLAST (default: true)
       --unmapped_subset_reads     Number of unmapped reads for BLAST (default: 100000)
       
-      --subset_unmapped_for_decontaminer  Subsample unmapped for DecontaMiner (default: true)
       --subset_seed <int>         Random seed for reproducibility (default: 100)
     
     QC TOOLS:
@@ -199,22 +177,13 @@ def helpMessage() {
     
     CONTAMINATION ANALYSIS:
       --run_contamination_check   Enable contamination checking (default: true)
-      --contamination_blast_dbs   Path to BLAST database(s) (default: /mnt/sas/Tools/blast_databases/)
+      --contamination_blast_dbs   Path to BLAST database(s) (required for contamination check)
       --contamination_evalue      BLAST e-value threshold (default: "1e-10")
       --contamination_min_reads   Minimum reads to report (default: 100)
       --contamination_gc_min      GC content minimum (default: 0.60)
       --contamination_gc_max      GC content maximum (default: 1.0)
       --contamination_mapq        MAPQ threshold (default: 10)
       
-      --run_decontaminer          Run DecontaMiner (default: true)
-      --decontaminer_dir          DecontaMiner installation directory
-      --decontaminer_config       DecontaMiner configuration file (default: provided)
-      --decontaminer_pairing      Pairing mode: "P" or "S" (default: "P")
-      --decontaminer_organisms    Organism codes (default: "bfv")
-      --decontaminer_format       Input format (default: "bam")
-      --decontaminer_quality_filter  Quality filter (default: "yes")
-      --decontaminer_ribo_filter  Ribosomal filter (default: "yes")
-    
     REPORTING:
       --run_multiqc               Run MultiQC (default: true)
       --run_blast_plots           Generate BLAST plots (default: true)
@@ -258,9 +227,42 @@ if (params.help) {
 }
 
 
-if (params.outdir == null){
-    println "Please specify the parameter '--outdir [output folder]'"
-    println "Run '~/nextflow run main.nf --help' for more information"
+// ====================
+// Parameter Validation
+// ====================
+def errors = []
+
+if (params.outdir == null) {
+    errors << "Please specify the parameter '--outdir [output folder]'"
+}
+
+if (params.run_star_alignment) {
+    if (!params.strains_base_dir && !params.standard_references_dir) {
+        errors << "STAR alignment requires at least one of:\n  --strains_base_dir <path>  (strain-specific pseudogenomes)\n  --standard_references_dir <path>  (standard reference genomes)"
+    }
+    if (!params.star_index_dir) {
+        errors << "STAR alignment requires --star_index_dir <path> (directory for STAR indices)"
+    }
+}
+
+if (params.run_contamination_check && !params.contamination_blast_dbs) {
+    errors << "Contamination check requires --contamination_blast_dbs <path> (BLAST database directory)"
+}
+
+if (params.run_fastq_screen && !FASTQ_SCREEN_CONF) {
+    errors << "FastQ Screen requires --fastq_screen_conf <path> (FastQ Screen config file)"
+}
+
+if (!errors.isEmpty()) {
+    println """
+    ========================================
+    ERROR: Missing required parameters
+    ========================================
+    ${errors.join('\n    ')}
+
+    Run 'nextflow run main.nf --help' for more information
+    ========================================
+    """
     exit 1
 }
 
@@ -601,51 +603,44 @@ if (!params.sample_sheet) {
 def need_ref = params.run_deeptools || params.run_picard_gc || params.run_bedtools_gc || params.run_contamination_check || params.run_mapinsights
 
 // Define tool paths based on execution profile
-// When using Singularity, use container paths; otherwise use host paths
+// When using Singularity, tools are on $PATH inside the container — use bare command names.
+// When running locally, use explicit paths from params (user must provide them).
 def usingSingularity = workflow.profile.contains('singularity')
 
-// Core alignment tools
-def STAR_BIN = usingSingularity ? "/opt/tools/STAR/bin/STAR" : params.star_bin
-def SAMTOOLS_BIN = usingSingularity ? "/opt/tools/bin/samtools" : params.samtools_bin
-def SEQTK_BIN = usingSingularity ? "/opt/tools/bin/seqtk" : params.seqtk_bin
-
-// QC tools
-def FASTQC_BIN = usingSingularity ? "/opt/tools/bin/fastqc" : params.fastqc_bin
-def FASTQ_SCREEN_BIN = usingSingularity ? "/opt/tools/bin/fastq_screen" : params.fastq_screen
-def FASTQ_SCREEN_CONF = usingSingularity ? "/opt/tools/fastq_screen.conf" : params.fastq_screen_conf
-def QUALIMAP_BIN = usingSingularity ? "/opt/tools/bin/qualimap" : params.qualimap_bin
-
-// Analysis tools
-def BEDTOOLS_BIN = usingSingularity ? "/opt/tools/bin/bedtools" : params.bedtools_bin
-def PICARD_JAR = usingSingularity ? "/opt/tools/picard/picard.jar" : params.picard_jar
-def DEEPTOOLS_GCBIAS = usingSingularity ? "/usr/local/bin/computeGCBias" : params.deeptools_gcbias
-def BLASTN_BIN = usingSingularity ? "/opt/tools/blast/bin/blastn" : params.blastn_bin
-
-// UCSC tools
-def FACOUNT_BIN = usingSingularity ? "/opt/tools/bin/faCount" : params.facount_bin
-def FA2BIT_BIN = usingSingularity ? "/opt/tools/bin/faToTwoBit" : params.fa2bit_bin
-
-// Other tools
-def REFORMAT_BIN = usingSingularity ? "/opt/tools/bbmap/reformat.sh" : params.reformat_bin
-def MULTIQC_BIN = usingSingularity ? "/usr/local/bin/multiqc" : params.multiqc_bin
-def MAPINSIGHTS_BIN = usingSingularity ? "/opt/tools/bin/mapinsights" : params.mapinsights_bin
-
-// DecontaMiner paths
-def DECONTAMINER_DIR = usingSingularity ? "/opt/tools/decontaminer/decontaMiner_1.4" : params.decontaminer_dir
-def DECONTAMINER_CONFIG = usingSingularity ? "/opt/tools/decontaminer/decontaMiner_1.4/config_files/configure_container.txt" : params.decontaminer_config
-
-if (usingSingularity) {
-    println "INFO: Using Singularity - Tool paths configured for container execution"
+def toolPath(paramValue, toolName) {
+    if (paramValue) return paramValue          // explicit param always wins
+    if (usingSingularity) return toolName       // container: rely on $PATH
+    return toolName                             // local: try $PATH as fallback
 }
 
-if (params.run_decontaminer) {
-    if (!DECONTAMINER_CONFIG) {
-        exit 1, "ERROR: DecontaMiner requires --decontaminer_config"
-    }
-    // Skip file existence check when using Singularity (file is inside container)
-    if (!usingSingularity && !file(DECONTAMINER_CONFIG).exists()) {
-        exit 1, "ERROR: DecontaMiner config file not found: ${DECONTAMINER_CONFIG}"
-    }
+// Core alignment tools
+def STAR_BIN        = toolPath(params.star_bin, "STAR")
+def SAMTOOLS_BIN    = toolPath(params.samtools_bin, "samtools")
+def SEQTK_BIN       = toolPath(params.seqtk_bin, "seqtk")
+
+// QC tools
+def FASTQC_BIN       = toolPath(params.fastqc_bin, "fastqc")
+def FASTQ_SCREEN_BIN = toolPath(params.fastq_screen_bin, "fastq_screen")
+def FASTQ_SCREEN_CONF = params.fastq_screen_conf
+def QUALIMAP_BIN     = toolPath(params.qualimap_bin, "qualimap")
+
+// Analysis tools
+def BEDTOOLS_BIN     = toolPath(params.bedtools_bin, "bedtools")
+def PICARD_JAR       = toolPath(params.picard_jar, "picard.jar")
+def DEEPTOOLS_GCBIAS = toolPath(params.deeptools_gcbias, "computeGCBias")
+def BLASTN_BIN       = toolPath(params.blastn_bin, "blastn")
+
+// UCSC tools
+def FACOUNT_BIN      = toolPath(params.facount_bin, "faCount")
+def FA2BIT_BIN       = toolPath(params.fa2bit_bin, "faToTwoBit")
+
+// Other tools
+def REFORMAT_BIN     = toolPath(params.reformat_bin, "reformat.sh")
+def MULTIQC_BIN      = toolPath(null, "multiqc")
+def MAPINSIGHTS_BIN  = toolPath(params.mapinsights_bin, "mapinsights")
+
+if (usingSingularity) {
+    println "INFO: Using Singularity - tools resolved via container \$PATH"
 }
 
 // Print configuration
@@ -658,7 +653,6 @@ STAR Subsampling:        ${params.subset_for_star} (${params.subset_star_reads} 
 BAM QC Subsampling:      ${params.subset_bam_for_qc} (${params.bam_qc_subset_mapped} reads)
 Mapped BLAST Subset:     ${params.subset_mapped_for_blast} (${params.mapped_subset_reads} reads)
 Unmapped BLAST Subset:   ${params.subset_unmapped_for_blast} (${params.unmapped_subset_reads} reads)
-Unmapped Decon Subset:   ${params.subset_unmapped_for_decontaminer} (${params.unmapped_subset_reads} reads)
 ========================================
 """
 
@@ -730,7 +724,6 @@ Qualimap:     ${params.run_qualimap}
 Contamination:
 --------------
 Check:        ${params.run_contamination_check}
-DecontaMiner: ${params.run_decontaminer}
 BLAST DBs:    ${params.contamination_blast_dbs ?: 'Not specified'}
 
 Subsampling:
@@ -1252,63 +1245,6 @@ process SUBSET_UNMAPPED_FOR_BLAST {
     """
 }
 
-process SUBSET_UNMAPPED_FOR_DECONTAMINER {
-    tag "${sample}_${strain}"
-    publishDir "${params.outdir}/Input/subsampled_unmapped_decontaminer/${sample}/${strain}", mode: 'copy'
-
-    input:
-    tuple val(sample), val(strain), path(unmapped_r1), path(unmapped_r2)
-
-    output:
-    tuple val(sample), val(strain), path("${sample}_${strain}_unmapped_decon_subset_1.fq"), path("${sample}_${strain}_unmapped_decon_subset_2.fq"), emit: subsampled_fastq
-    path "${sample}_${strain}_unmapped_decon_subset_stats.txt", emit: stats
-
-    when:
-    params.subset_unmapped_for_decontaminer
-
-    script:
-    """
-    set -euo pipefail
-    
-    echo "Subsampling Unmapped for DecontaMiner: ${sample}_${strain}" > ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    echo "=========================================================" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    echo "Target: ${params.unmapped_subset_reads} reads per file" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    echo "" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    
-    TOTAL_R1=\$(cat ${unmapped_r1} | wc -l | awk '{print \$1/4}')
-    TOTAL_R2=\$(cat ${unmapped_r2} | wc -l | awk '{print \$1/4}')
-    
-    echo "Total unmapped R1: \$TOTAL_R1" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    echo "Total unmapped R2: \$TOTAL_R2" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    
-    # Subsample and add /1 suffix to R1 reads
-    if [ "\$TOTAL_R1" -gt "${params.unmapped_subset_reads}" ]; then
-        ${SEQTK_BIN} sample -s${params.subset_seed} ${unmapped_r1} ${params.unmapped_subset_reads} | \\
-            sed '1~4 s/\$/\\/1/' > ${sample}_${strain}_unmapped_decon_subset_1.fq
-        echo "Subsampled R1 to ${params.unmapped_subset_reads} reads" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    else
-        sed '1~4 s/\$/\\/1/' ${unmapped_r1} > ${sample}_${strain}_unmapped_decon_subset_1.fq
-        echo "Using all \$TOTAL_R1 unmapped R1 reads" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    fi
-    
-    # Subsample and add /2 suffix to R2 reads
-    if [ "\$TOTAL_R2" -gt "${params.unmapped_subset_reads}" ]; then
-        ${SEQTK_BIN} sample -s${params.subset_seed} ${unmapped_r2} ${params.unmapped_subset_reads} | \\
-            sed '1~4 s/\$/\\/2/' > ${sample}_${strain}_unmapped_decon_subset_2.fq
-        echo "Subsampled R2 to ${params.unmapped_subset_reads} reads" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    else
-        sed '1~4 s/\$/\\/2/' ${unmapped_r2} > ${sample}_${strain}_unmapped_decon_subset_2.fq
-        echo "Using all \$TOTAL_R2 unmapped R2 reads" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    fi
-    
-    FINAL_R1=\$(cat ${sample}_${strain}_unmapped_decon_subset_1.fq | wc -l | awk '{print \$1/4}')
-    FINAL_R2=\$(cat ${sample}_${strain}_unmapped_decon_subset_2.fq | wc -l | awk '{print \$1/4}')
-    echo "Final R1 reads: \$FINAL_R1" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    echo "Final R2 reads: \$FINAL_R2" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    echo "Purpose: DecontaMiner analysis" >> ${sample}_${strain}_unmapped_decon_subset_stats.txt
-    """
-}
-
 process DEEPTOOLS_GC {
     tag "${sample}_${bam_type}"
     publishDir "${params.outdir}/Output/deeptools_gc_bias/${sample}/", mode: 'copy'
@@ -1612,214 +1548,6 @@ process FASTQC_INPUT_FASTQ {
     """
 }
 
-process DECONTAMINER_STEP1_STAR_MAPPED {
-    tag "${sample} ${reads_type}"
-    publishDir "${params.outdir}/Temporary/decontaminer/${sample}/step1_decontaminer_mapped", mode: 'copy'
-
-    input:
-    tuple val(sample), path(mapped_bam), path(mapped_bai), val(reads_type)
-
-    output:
-    tuple val(sample), val(reads_type), path("decontaminer_output"), emit: output_dir
-    path "decontaminer_output/RESULTS/**", optional: true
-
-    when:
-    params.run_decontaminer
-
-    script:
-    def organisms = ""
-    if (params.decontaminer_organisms.contains('b')) organisms += " -b"
-    if (params.decontaminer_organisms.contains('f')) organisms += " -f"
-    if (params.decontaminer_organisms.contains('v')) organisms += " -v"
-    
-    def quality_filter = params.decontaminer_quality_filter ? "-Q ${params.decontaminer_quality_filter}" : ""
-    def ribo_filter = params.decontaminer_ribo_filter ? "-R ${params.decontaminer_ribo_filter}" : ""
-    """
-    set -euo pipefail
-    
-    SAMPLE="${sample}"
-    mkdir -p input_fastq
-
-    ${SAMTOOLS_BIN} fastq -@ ${task.cpus} -1 input_fastq/\${SAMPLE}_mapped_1.fq -2 input_fastq/\${SAMPLE}_mapped_2.fq -0 /dev/null -s /dev/null -N ${mapped_bam}
-    
-    echo "Running DecontaMiner on MAPPED reads...."
-    bash ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh \\
-        -i \$(pwd)/input_fastq \\
-        -o \$(pwd)/decontaminer_output \\
-        -c ${DECONTAMINER_CONFIG} \\
-        -F fastq \\
-        -s ${params.decontaminer_pairing} \\
-        ${quality_filter} \\
-        ${ribo_filter} \\
-        ${organisms} || echo "DecontaMiner step 1 (mapped) completed with warnings"
-    
-    mkdir -p decontaminer_output
-    """
-}
-
-process DECONTAMINER_STEP1_STAR_UNMAPPED {
-    tag "${sample} ${reads_type}"
-    publishDir "${params.outdir}/Temporary/decontaminer/${sample}/step1_decontaminer_unmapped", mode: 'copy'
-
-    input:
-    tuple val(sample), path(unmapped_r1), path(unmapped_r2), val(reads_type)
-
-    output:
-    tuple val(sample), val(reads_type), path("decontaminer_output"), emit: output_dir
-    path "decontaminer_output/RESULTS/**", optional: true
-
-    when:
-    params.run_decontaminer
-
-    script:
-    def organisms = ""
-    if (params.decontaminer_organisms.contains('b')) organisms += " -b"
-    if (params.decontaminer_organisms.contains('f')) organisms += " -f"
-    if (params.decontaminer_organisms.contains('v')) organisms += " -v"
-    
-    def quality_filter = params.decontaminer_quality_filter ? "-Q ${params.decontaminer_quality_filter}" : ""
-    def ribo_filter = params.decontaminer_ribo_filter ? "-R ${params.decontaminer_ribo_filter}" : ""
-    
-    """
-    set -euo pipefail
-    
-    SAMPLE="${sample}"
-    mkdir -p input_fastq
-    
-    # Add /1 and /2 suffixes to read names (only to header lines)
-    awk 'NR%4==1 {sub(/^@/, ""); print "@"\$0"/1"} NR%4!=1' ${unmapped_r1} > input_fastq/\${SAMPLE}_unmapped_1.fq
-    awk 'NR%4==1 {sub(/^@/, ""); print "@"\$0"/2"} NR%4!=1' ${unmapped_r2} > input_fastq/\${SAMPLE}_unmapped_2.fq
-    
-    echo "Running DecontaMiner on UNMAPPED reads...."
-    bash ${DECONTAMINER_DIR}/shell_scripts/decontaMiner.sh \\
-        -i \$(pwd)/input_fastq \\
-        -o \$(pwd)/decontaminer_output \\
-        -c ${DECONTAMINER_CONFIG} \\
-        -F fastq \\
-        -s ${params.decontaminer_pairing} \\
-        ${quality_filter} \\
-        ${ribo_filter} \\
-        ${organisms} || echo "DecontaMiner step 1 (unmapped) completed with warnings"
-    """
-}
-
-process DECONTAMINER_STEP2 {
-    tag "${sample} ${reads_type}"
-    publishDir "${params.outdir}/Temporary/decontaminer/${sample}/step2_filtering", mode: 'copy'
-
-    input:
-    tuple val(sample), val(reads_type), path(output_dir)
-
-    output:
-    tuple val(sample), val(reads_type), path("${output_dir}"), emit: filtered_dir
-
-    when:
-    params.run_decontaminer
-
-    script:
-    """
-    set -euo pipefail
-    
-    if [ -d "${output_dir}/RESULTS/BACTERIA" ]; then
-        bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
-            -i \$(pwd)/${output_dir}/RESULTS/BACTERIA/ \\
-            -s ${params.decontaminer_pairing} \\
-            -g ${params.decontaminer_gap} \\
-            -m ${params.decontaminer_mismatch} \\
-            -l ${params.decontaminer_match_len} \\
-            -V O || echo "Bacteria/Fungi filtering completed with warnings"
-    fi
-
-    if [ -d "${output_dir}/RESULTS/FUNGI" ]; then
-        bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
-            -i \$(pwd)/${output_dir}/RESULTS/FUNGI/ \\
-            -s ${params.decontaminer_pairing} \\
-            -g ${params.decontaminer_gap} \\
-            -m ${params.decontaminer_mismatch} \\
-            -l ${params.decontaminer_match_len} \\
-            -V O || echo "Bacteria/Fungi filtering completed with warnings"
-    fi
-    
-    if [ -d "${output_dir}/RESULTS/VIRUSES" ]; then
-        bash ${DECONTAMINER_DIR}/shell_scripts/filterBlastInfo.sh \\
-            -i \$(pwd)/${output_dir}/RESULTS/VIRUSES \\
-            -s ${params.decontaminer_pairing} \\
-            -g ${params.decontaminer_gap} \\
-            -m ${params.decontaminer_mismatch} \\
-            -l ${params.decontaminer_match_len} \\
-            -V V || echo "Virus filtering completed with warnings"
-    fi
-    
-    echo "Filtering step completed for ${sample}"
-    """
-}
-
-process DECONTAMINER_STEP3 {
-    tag "${sample} ${reads_type}"
-    publishDir "${params.outdir}/Output/decontaminer/${sample}/", mode: 'copy'
-
-    input:
-    tuple val(sample), val(reads_type), path(filtered_dir)
-
-    output:
-    path "bacteria_reports/**", optional: true, emit: bacteria_reports
-    path "fungi_reports/**", optional: true, emit: fungi_reports
-    path "virus_reports/**", optional: true, emit: virus_reports
-    path "HTML_REPORTS/**", optional: true, emit: html_reports
-
-    when:
-    params.run_decontaminer
-
-    script:
-    def plots_flag = params.decontaminer_generate_plots ? "-P y" : ""
-    """
-    set -euo pipefail
-
-    export PATH="/opt/R/4.5.2/bin:\$PATH"
-
-    if [ -d "${filtered_dir}/RESULTS/BACTERIA/COLLECTED_INFO" ]; then
-        bash ${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh \\
-            -i \$(pwd)/${filtered_dir}/RESULTS/BACTERIA/COLLECTED_INFO \\
-            -t ${params.decontaminer_match_threshold} \\
-            -V O \\
-            ${plots_flag} || echo "Bacteria collection completed with warnings"
-
-        mkdir -p bacteria_reports
-        # Copy COLLECTED_INFO outputs
-        cp -r ${filtered_dir}/RESULTS/BACTERIA/COLLECTED_INFO/* bacteria_reports/ 2>/dev/null || true
-    fi
-
-    if [ -d "${filtered_dir}/RESULTS/FUNGI/COLLECTED_INFO" ]; then
-        bash ${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh \\
-            -i \$(pwd)/${filtered_dir}/RESULTS/FUNGI/COLLECTED_INFO \\
-            -t ${params.decontaminer_match_threshold} \\
-            -V O \\
-            ${plots_flag} || echo "Fungi collection completed with warnings"
-
-        mkdir -p fungi_reports
-        cp -r ${filtered_dir}/RESULTS/FUNGI/COLLECTED_INFO/* fungi_reports/ 2>/dev/null || true
-    fi
-
-    if [ -d "${filtered_dir}/RESULTS/VIRUSES/COLLECTED_INFO" ]; then
-        bash ${DECONTAMINER_DIR}/shell_scripts/collectInfo.sh \\
-            -i \$(pwd)/${filtered_dir}/RESULTS/VIRUSES/COLLECTED_INFO \\
-            -t ${params.decontaminer_match_threshold} \\
-            -V V \\
-            ${plots_flag} || echo "Virus collection completed with warnings"
-
-        mkdir -p virus_reports
-        cp -r ${filtered_dir}/RESULTS/VIRUSES/COLLECTED_INFO/* virus_reports/ 2>/dev/null || true
-    fi
-
-    if [ -d "${filtered_dir}/RESULTS/HTML_REPORTS" ]; then
-        echo "Copying shared HTML_REPORTS directory..."
-        cp -r ${filtered_dir}/RESULTS/HTML_REPORTS . || echo "Warning: Could not copy HTML_REPORTS"
-    else
-        echo "No HTML_REPORTS directory found - this is normal if no valid contamination was detected"
-    fi
-    """
-}
-
 process FASTQC_MAPPED_BAM {
     tag "${sample} ${strain}"
     publishDir "${params.outdir}/Output/fastqc/${sample}/mapped_bam", mode: 'copy'
@@ -1898,7 +1626,7 @@ process BLAST_MAPPED_READS_MULTI {
 
     script:
     """
-    export BLASTDB=/mnt/sas/Tools/blast_databases
+    export BLASTDB=${params.contamination_blast_dbs}
     
     echo "Starting BLAST analysis: ${sample} vs ${db_name}" >&2
     echo "Extracting mapped reads from BAM: ${bam}" >&2
@@ -1986,7 +1714,7 @@ process BLAST_UNMAPPED_READS_MULTI {
     script:
     """
     
-    export BLASTDB=/mnt/sas/Tools/blast_databases
+    export BLASTDB=${params.contamination_blast_dbs}
     
     echo "Starting BLAST analysis: ${sample} vs ${db_name}" >&2
     
@@ -2663,52 +2391,7 @@ workflow {
     }
 
     // ===================================
-    // SECTION 5: DECONTAMINER
-    // ===================================
-    
-    if (params.run_decontaminer) {
-        // Initialize empty channel for decontaminer outputs
-        decontaminer_all_outputs = Channel.empty()
-        
-        if (params.sample_sheet && params.run_star_alignment) {
-            // Use STAR outputs
-            
-            // Run on mapped reads
-            decontaminer_mapped_input = bams_for_qc
-                .map { sample, strain, bam, bai -> 
-                    tuple("${sample}_${strain}", bam, bai, "mapped") 
-                }
-            
-            // Subset unmapped for DecontaMiner
-            if (params.subset_unmapped_for_decontaminer) {
-                SUBSET_UNMAPPED_FOR_DECONTAMINER(star_unmapped_fastq)
-                unmapped_for_decontaminer = SUBSET_UNMAPPED_FOR_DECONTAMINER.out.subsampled_fastq
-            } else {
-                unmapped_for_decontaminer = star_unmapped_fastq
-            }
-            
-            decontaminer_unmapped_input = unmapped_for_decontaminer
-                .map { sample, strain, r1, r2 -> 
-                    tuple("${sample}_${strain}", r1, r2, "unmapped") 
-                }
-            
-            
-            DECONTAMINER_STEP1_STAR_MAPPED(decontaminer_mapped_input)
-            DECONTAMINER_STEP1_STAR_UNMAPPED(decontaminer_unmapped_input)
-            
-            // Combine outputs for steps 2 and 3
-            decontaminer_all_outputs = DECONTAMINER_STEP1_STAR_MAPPED.out.output_dir
-                .mix(DECONTAMINER_STEP1_STAR_UNMAPPED.out.output_dir)
-            
-        }
-        
-        // Run steps 2 and 3 - they will automatically wait for step 1 outputs
-        DECONTAMINER_STEP2(decontaminer_all_outputs)
-        DECONTAMINER_STEP3(DECONTAMINER_STEP2.out.filtered_dir)
-    }
-
-    // ===================================
-    // SECTION 6: CONTAMINATION CHECK
+    // SECTION 5: CONTAMINATION CHECK
     // ===================================
     
     if (params.run_contamination_check && (params.sample_sheet && params.run_star_alignment)) {
@@ -2998,7 +2681,6 @@ workflow.onComplete {
     ${params.subset_for_star ? "  STAR: ${params.subset_star_reads} reads" : "  X STAR: Full FASTQs"}
     ${params.subset_bam_for_qc ? "  BAM QC: ${params.bam_qc_subset_mapped} reads" : "  X BAM QC: Full BAMs"}
     ${params.subset_unmapped_for_blast ? "  BLAST: ${params.unmapped_subset_reads} reads" : "  X BLAST: Full unmapped"}
-    ${params.subset_unmapped_for_decontaminer ? "  DecontaMiner: ${params.unmapped_subset_reads} reads" : "  X DecontaMiner: Full unmapped"}
 
     ${params.run_multiqc ? "To generate MultiQC report:\n    cd ${params.outdir} && multiqc . --force" : ''}
     ========================================

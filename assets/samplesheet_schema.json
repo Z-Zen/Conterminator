@@ -1,0 +1,70 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://gitlab.epfl.ch/abadreddine/conterminator/assets/samplesheet_schema.json",
+    "title": "Conterminator sample sheet schema",
+    "description": "Schema for validation of the Conterminator sample sheet (TSV with 5 columns)",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "sample": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Sample name must be provided and cannot contain spaces"
+            },
+            "strain": {
+                "type": "string",
+                "errorMessage": "Strain name (leave empty to default to GRCm39)"
+            },
+            "type": {
+                "type": "string",
+                "enum": ["fastq", "bam", "unmapped_fastq"],
+                "errorMessage": "Type must be one of: fastq, bam, unmapped_fastq"
+            },
+            "read1": {
+                "type": "string",
+                "format": "file-path",
+                "errorMessage": "Read1 file path must be provided and valid"
+            },
+            "read2": {
+                "type": "string",
+                "errorMessage": "Read2 file path (required for fastq/unmapped_fastq, empty for bam)"
+            }
+        },
+        "required": ["sample", "type", "read1"],
+        "allOf": [
+            {
+                "if": {
+                    "properties": { "type": { "const": "fastq" } }
+                },
+                "then": {
+                    "required": ["read2"],
+                    "properties": {
+                        "read2": {
+                            "type": "string",
+                            "minLength": 1,
+                            "format": "file-path",
+                            "errorMessage": "Read2 is required for fastq input type"
+                        }
+                    }
+                }
+            },
+            {
+                "if": {
+                    "properties": { "type": { "const": "unmapped_fastq" } }
+                },
+                "then": {
+                    "required": ["read2"],
+                    "properties": {
+                        "read2": {
+                            "type": "string",
+                            "minLength": 1,
+                            "format": "file-path",
+                            "errorMessage": "Read2 is required for unmapped_fastq input type"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+}
