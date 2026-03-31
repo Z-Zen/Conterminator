@@ -100,21 +100,9 @@ The pipeline uses the following bioinformatics tools (paths configurable in `nex
 ### Clone the Repository
 
 ```bash
-git clone git@gitlab.epfl.ch:abadreddine/conterminator.git
-cd conterminator
+git clone git@github.com:Z-Zen/Conterminator.git
+cd Conterminator
 ```
-
-If the above command didn't work, make sure you have added your SSH key to gitlab. You can do it using the following commands (replace `example.email@epfl.ch` by your EPFL email):
-```bash
-ssh-keygen -t ed25519 -C "example.email@epfl.ch" -f ~/.ssh/id_ed25519_epfl
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519_epfl
-cat ~/.ssh/id_ed25519_epfl.pub
-```
-
-Copy the full output of the `cat` command and paste it in the [SSH keys](https://gitlab.epfl.ch/-/user_settings/ssh_keys) of Gitlab.
-Click on `Add new key` and copy the key inside the box. Then in the expiration date, click on the year and another time to prolong the key life.
-Once done, click on `Add key`. Now, you can try cloning again the repository.
 
 ### Tools
 
@@ -562,13 +550,26 @@ nextflow clean -f $(nextflow log -q)
 
 **Author:** Alaa Badreddine
 
-**Project Repository:** https://gitlab.epfl.ch/abadreddine/conterminator
+**Project Repository:** https://github.com/Z-Zen/Conterminator
 
 For bug reports and feature requests, please open an issue on GitLab.
 
 ---
 
 ## Version History
+- **v1.3** (March 2026) - Remove DecontaMiner, eliminate hardcoded paths, add tests:
+  - Remove DecontaMiner entirely (5 processes, all params, config, workflow logic)
+  - Replace all hardcoded /mnt/sas tool/reference paths with null defaults
+  - Add centralized parameter validation with clear error messages
+  - Simplify tool path resolution: use bare command names via $PATH in containers, with optional param overrides for local installs
+  - Fix Picard to use wrapper command instead of java -jar with bare filename
+  - Support both compressed and uncompressed FASTA/GTF in reference discovery
+  - Fix STAR index detection to check star_index/ subdirectory
+  - Parse sample sheet independently of STAR alignment toggle
+  - Update all URLs from GitLab to GitHub
+  - Add sample sheet JSON schema (assets/samplesheet_schema.json)
+  - Add test suite with synthetic data and validation tests
+  - Add test profile to nextflow.config
 
 - **v1.2** (December 2025) - Enhanced reference genome support:
   - Dual directory support for reference genomes:
