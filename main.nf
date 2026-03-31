@@ -625,7 +625,8 @@ def QUALIMAP_BIN     = toolPath(params.qualimap_bin, "qualimap")
 
 // Analysis tools
 def BEDTOOLS_BIN     = toolPath(params.bedtools_bin, "bedtools")
-def PICARD_JAR       = toolPath(params.picard_jar, "picard.jar")
+// Picard: if user provides a .jar path, prefix with "java -jar"; otherwise use bare command
+def PICARD_CMD = params.picard_jar ? (params.picard_jar.endsWith('.jar') ? "java -jar ${params.picard_jar}" : params.picard_jar) : "picard"
 def DEEPTOOLS_GCBIAS = toolPath(params.deeptools_gcbias, "computeGCBias")
 def BLASTN_BIN       = toolPath(params.blastn_bin, "blastn")
 
@@ -909,14 +910,31 @@ process PREPARE_STRAIN_REFERENCE {
     # If not found, look for any FASTA file (for standard reference genomes like GRCm39)
     if [ -z "\${FASTA}" ]; then
         echo "INFO: Strain-specific pseudogenome not found, searching for standard reference genome..." >&2
-        FASTA=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.fa.gz" -o -name "*.fasta.gz" -o -name "*.fa" -o -name "*.fasta" \\) 2>/dev/null | head -1)
+        # Priority 1: Primary assembly or toplevel DNA (typical for Ensembl/UCSC)
+        FASTA=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*dna.primary_assembly.fa*" -o -name "*dna.toplevel.fa*" \\) 2>/dev/null | head -1)
+        
+        # Priority 2: Any DNA FASTA
+        if [ -z "\${FASTA}" ]; then
+            FASTA=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f -name "*dna.fa*" 2>/dev/null | head -1)
+        fi
+        
+        # Priority 3: Any FASTA excluding cDNA/ncRNA/peptide (to avoid transcriptomes)
+        if [ -z "\${FASTA}" ]; then
+            FASTA=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.fa*" -o -name "*.fasta*" \\) ! -name "*.cdna.*" ! -name "*.ncrna.*" ! -name "*.pep.*" 2>/dev/null | head -1)
+        fi
+
+        # Fallback: Original behavior
+        if [ -z "\${FASTA}" ]; then
+            FASTA=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.fa.gz" -o -name "*.fasta.gz" -o -name "*.fa" -o -name "*.fasta" \\) 2>/dev/null | head -1)
+        fi
     fi
 
     if [ -z "\${FASTA}" ]; then
         echo "ERROR: Could not find FASTA file for ${strain} in \${STRAIN_DIR}" >&2
         echo "Searched for:" >&2
         echo "  - *pseudogenome__strain_${strain}.fa.gz" >&2
-        echo "  - *.fa.gz, *.fasta.gz, *.fa, *.fasta" >&2
+        echo "  - *.dna.primary_assembly.fa*, *.dna.toplevel.fa*, *.dna.fa*" >&2
+        echo "  - *.fa.gz, *.fasta.gz, *.fa, *.fasta (excluding cdna/ncrna/pep)" >&2
         exit 1
     fi
 
@@ -926,7 +944,13 @@ process PREPARE_STRAIN_REFERENCE {
     # If not found, look for any GTF file (for standard reference genomes)
     if [ -z "\${GTF}" ]; then
         echo "INFO: Strain-specific GTF not found, searching for standard annotation..." >&2
-        GTF=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.gtf.gz" -o -name "*.gtf" -o -name "*.gff.gz" -o -name "*.gff3.gz" -o -name "*.gff" -o -name "*.gff3" \\) 2>/dev/null | head -1)
+        # Priority 1: Standard GTF (avoiding abinitio, etc.)
+        GTF=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.gtf.gz" -o -name "*.gtf" \\) ! -name "*.abinitio.*" 2>/dev/null | head -1)
+        
+        # Fallback: Original behavior
+        if [ -z "\${GTF}" ]; then
+            GTF=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.gtf.gz" -o -name "*.gtf" -o -name "*.gff.gz" -o -name "*.gff3.gz" -o -name "*.gff" -o -name "*.gff3" \\) 2>/dev/null | head -1)
+        fi
     fi
 
     if [ -z "\${GTF}" ]; then
@@ -989,15 +1013,13 @@ process BUILD_STAR_INDEX {
         GTF_FILE="${gtf}"
     fi
     
-    ${STAR_BIN} \\
-        --runMode genomeGenerate \\
-        --runThreadN ${task.cpus} \\
-        --genomeDir ${strain} \\
-        --genomeFastaFiles \${FASTA_FILE} \\
-        --sjdbGTFfile \${GTF_FILE} \\
+    ${STAR_BIN} \
+        --runMode genomeGenerate \
+        --runThreadN ${task.cpus} \
+        --genomeDir ${strain} \
+        --genomeFastaFiles \${FASTA_FILE} \
+        --sjdbGTFfile \${GTF_FILE} \
         --sjdbOverhang 149
-    
-    sed 's///g'
 
     echo "STAR index built successfully for ${strain}"
     """
@@ -1310,7 +1332,7 @@ process PICARD_GC_BIAS {
     set -euo pipefail
     export PATH="/opt/R/4.5.2/bin:\$PATH"
 
-    java -jar ${PICARD_JAR} CollectGcBiasMetrics \\
+    ${PICARD_CMD} CollectGcBiasMetrics \\
         I=${bam} \\
         O=${sample}.gc_bias_metrics.txt \\
         SUMMARY_OUTPUT=${sample}.gc_bias_summary.txt \\
@@ -1318,7 +1340,7 @@ process PICARD_GC_BIAS {
         R=${ref} \\
         VALIDATION_STRINGENCY=LENIENT
 
-    java -jar ${PICARD_JAR} CollectMultipleMetrics \\
+    ${PICARD_CMD} CollectMultipleMetrics \\
         I=${bam} \\
         O=${sample}_allmetrics \\
         R=${ref}
