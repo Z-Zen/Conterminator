@@ -97,13 +97,10 @@ params.multiqc_config         = null
 
 params.singularity_path = null
 
-def content = new File('name.txt').text
-
-println content
-
-// def welcomeMessage(){
-//     log.info content
-// }
+def bannerFile = new File("${projectDir}/name.txt")
+if (bannerFile.exists()) {
+    println bannerFile.text
+}
 
 def helpMessage() {
     log.info"""
@@ -249,7 +246,7 @@ if (params.run_contamination_check && !params.contamination_blast_dbs) {
     errors << "Contamination check requires --contamination_blast_dbs <path> (BLAST database directory)"
 }
 
-if (params.run_fastq_screen && !FASTQ_SCREEN_CONF) {
+if (params.run_fastq_screen && !params.fastq_screen_conf) {
     errors << "FastQ Screen requires --fastq_screen_conf <path> (FastQ Screen config file)"
 }
 
@@ -479,7 +476,24 @@ def availableStrains = getAvailableStrains()
 def requestedStrains = []
 def sampleToStrain = [:]
 
-if (params.sample_sheet && params.run_star_alignment) {
+if (params.sample_sheet) {
+    sampleToStrain = parseSampleSheet()
+    requestedStrains = getStrainsFromSampleSheet(sampleToStrain)
+
+    println """
+    ========================================
+    Sample Sheet Configuration
+    ========================================
+    Sample sheet: ${params.sample_sheet}
+    Sample-strain mappings:
+    ${sampleToStrain.collect { k, v -> "  ${k} → ${v}" }.join('\n')}
+
+    Unique strains: ${requestedStrains.join(', ')}
+    ========================================
+    """
+}
+
+if (params.run_star_alignment) {
     if (params.sample_sheet && params.strain) {
         println """
         ========================================
@@ -490,25 +504,31 @@ if (params.sample_sheet && params.run_star_alignment) {
         """
         System.exit(1)
     }
-    
-    if (params.sample_sheet) {
-        sampleToStrain = parseSampleSheet()
-        requestedStrains = getStrainsFromSampleSheet(sampleToStrain)
-        
+
+    if (!params.sample_sheet && !params.strain) {
         println """
         ========================================
-        Sample Sheet Configuration
+        ERROR: No strain specified
         ========================================
-        Sample sheet: ${params.sample_sheet}
-        Sample-strain mappings:
-        ${sampleToStrain.collect { k, v -> "  ${k} → ${v}" }.join('\n')}
-        
-        Unique strains: ${requestedStrains.join(', ')}
+        Please specify strains using EITHER:
+
+        Option 1: Sample sheet (recommended)
+          --sample_sheet samples.tsv
+
+        Option 2: Strain list
+          --strain C57BL_6J
+          --strain "C57BL_6J,DBA_2J"
+
+        Available strains (${availableStrains.size()}):
+        ========================================
+        ${availableStrains.join('\n        ')}
         ========================================
         """
-    } else if (params.strain) {
+        System.exit(1)
+    }
+
+    if (params.strain) {
         requestedStrains = parseStrains()
-        
         println """
         ========================================
         Strain Configuration
@@ -517,26 +537,6 @@ if (params.sample_sheet && params.run_star_alignment) {
         Mode: All samples will be aligned to ALL specified strains
         ========================================
         """
-    } else {
-        println """
-        ========================================
-        ERROR: No strain specified
-        ========================================
-        Please specify strains using EITHER:
-        
-        Option 1: Sample sheet (recommended)
-          --sample_sheet samples.tsv
-        
-        Option 2: Strain list
-          --strain C57BL_6J
-          --strain "C57BL_6J,DBA_2J"
-        
-        Available strains (${availableStrains.size()}):
-        ========================================
-        ${availableStrains.join('\n        ')}
-        ========================================
-        """
-        System.exit(1)
     }
     
     // Validate that each requested strain has a directory in either strains_base_dir or standard_references_dir
@@ -607,10 +607,9 @@ def need_ref = params.run_deeptools || params.run_picard_gc || params.run_bedtoo
 // When running locally, use explicit paths from params (user must provide them).
 def usingSingularity = workflow.profile.contains('singularity')
 
-def toolPath(paramValue, toolName) {
+def toolPath = { paramValue, toolName ->
     if (paramValue) return paramValue          // explicit param always wins
-    if (usingSingularity) return toolName       // container: rely on $PATH
-    return toolName                             // local: try $PATH as fallback
+    return toolName                            // rely on $PATH (container or local)
 }
 
 // Core alignment tools
@@ -857,7 +856,7 @@ process PREPARE_STRAIN_REFERENCE {
     val strain
 
     output:
-    tuple val(strain), path("${strain}_genome.fa.gz"), path("${strain}_annotation.gtf.gz"), emit: references
+    tuple val(strain), path("${strain}_genome.fa{,.gz}"), path("${strain}_annotation.gtf{,.gz}"), emit: references
 
     script:
     """
@@ -910,14 +909,14 @@ process PREPARE_STRAIN_REFERENCE {
     # If not found, look for any FASTA file (for standard reference genomes like GRCm39)
     if [ -z "\${FASTA}" ]; then
         echo "INFO: Strain-specific pseudogenome not found, searching for standard reference genome..." >&2
-        FASTA=\$(find "\${STRAIN_DIR}" -type f \\( -name "*.fa.gz" -o -name "*.fasta.gz" -o -name "*.genome.fa.gz" \\) 2>/dev/null | head -1)
+        FASTA=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.fa.gz" -o -name "*.fasta.gz" -o -name "*.fa" -o -name "*.fasta" \\) 2>/dev/null | head -1)
     fi
 
     if [ -z "\${FASTA}" ]; then
         echo "ERROR: Could not find FASTA file for ${strain} in \${STRAIN_DIR}" >&2
         echo "Searched for:" >&2
         echo "  - *pseudogenome__strain_${strain}.fa.gz" >&2
-        echo "  - *.fa.gz, *.fasta.gz, *.genome.fa.gz" >&2
+        echo "  - *.fa.gz, *.fasta.gz, *.fa, *.fasta" >&2
         exit 1
     fi
 
@@ -927,19 +926,29 @@ process PREPARE_STRAIN_REFERENCE {
     # If not found, look for any GTF file (for standard reference genomes)
     if [ -z "\${GTF}" ]; then
         echo "INFO: Strain-specific GTF not found, searching for standard annotation..." >&2
-        GTF=\$(find "\${STRAIN_DIR}" -type f \\( -name "*.gtf.gz" -o -name "*.gff.gz" -o -name "*.gff3.gz" \\) 2>/dev/null | head -1)
+        GTF=\$(find "\${STRAIN_DIR}" -maxdepth 1 -type f \\( -name "*.gtf.gz" -o -name "*.gtf" -o -name "*.gff.gz" -o -name "*.gff3.gz" -o -name "*.gff" -o -name "*.gff3" \\) 2>/dev/null | head -1)
     fi
 
     if [ -z "\${GTF}" ]; then
         echo "ERROR: Could not find GTF/GFF file for ${strain} in \${STRAIN_DIR}" >&2
         echo "Searched for:" >&2
         echo "  - *pseudogenome__strain_${strain}.gtf.gz" >&2
-        echo "  - *.gtf.gz, *.gff.gz, *.gff3.gz" >&2
+        echo "  - *.gtf.gz, *.gtf, *.gff.gz, *.gff3.gz, *.gff, *.gff3" >&2
         exit 1
     fi
 
-    ln -s "\${FASTA}" ${strain}_genome.fa.gz
-    ln -s "\${GTF}" ${strain}_annotation.gtf.gz
+    # Link with appropriate extension
+    if [[ "\${FASTA}" == *.gz ]]; then
+        ln -s "\${FASTA}" ${strain}_genome.fa.gz
+    else
+        ln -s "\${FASTA}" ${strain}_genome.fa
+    fi
+
+    if [[ "\${GTF}" == *.gz ]]; then
+        ln -s "\${GTF}" ${strain}_annotation.gtf.gz
+    else
+        ln -s "\${GTF}" ${strain}_annotation.gtf
+    fi
 
     echo "Prepared references for ${strain}"
     echo "FASTA: \${FASTA}"
@@ -2152,12 +2161,19 @@ workflow {
 
                 strain_index_status = PREPARE_STRAIN_REFERENCE.out.references
                     .map { strain, fasta, gtf ->
+                        // Check both <star_index_dir>/<strain>/SA and <star_index_dir>/<strain>/star_index/SA
                         def indexDir = file("${params.star_index_dir}/${strain}")
+                        def indexSubDir = file("${params.star_index_dir}/${strain}/star_index")
                         def saFile = file("${params.star_index_dir}/${strain}/SA")
-                        def genomeFile = file("${params.star_index_dir}/${strain}/Genome")
-                        def indexExists = indexDir.exists() && saFile.exists() && genomeFile.exists()
+                        def saFileSub = file("${params.star_index_dir}/${strain}/star_index/SA")
 
-                        if (indexExists) {
+                        def indexExists = false
+                        if (indexSubDir.exists() && saFileSub.exists()) {
+                            indexDir = indexSubDir
+                            indexExists = true
+                            println "OK: Found existing STAR index for ${strain} in star_index/"
+                        } else if (indexDir.exists() && saFile.exists()) {
+                            indexExists = true
                             println "OK: Found existing STAR index for ${strain}"
                         } else {
                             println "Warning: STAR index not found for ${strain}, building..."
