@@ -208,7 +208,7 @@ def helpMessage() {
     
     Project: Conterminator v1.3
     Author:  Alaa Badreddine
-    Home:    https://gitlab.epfl.ch/abadreddine/conterminator
+    Home:    https://github.com/Z-Zen/Conterminator
     
     For detailed documentation and issue reporting,
     visit the project repository on GitLab.

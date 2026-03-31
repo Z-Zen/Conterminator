@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
-    "$id": "https://gitlab.epfl.ch/abadreddine/conterminator/assets/samplesheet_schema.json",
+    "$id": "https://github.com/Z-Zen/Conterminator/assets/samplesheet_schema.json",
     "title": "Conterminator sample sheet schema",
     "description": "Schema for validation of the Conterminator sample sheet (TSV with 5 columns)",
     "type": "array",
