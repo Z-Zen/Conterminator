@@ -1299,7 +1299,7 @@ process DEEPTOOLS_GC {
     
     EFFECTIVE_SIZE=\$(cat ${effective_size_file})
     
-    python3 ${DEEPTOOLS_GCBIAS} \\
+    ${DEEPTOOLS_GCBIAS} \\
         --bamfile ${bam} \\
         --genome ${ref2bit} \\
         --effectiveGenomeSize \$EFFECTIVE_SIZE \\
