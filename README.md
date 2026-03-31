@@ -1,6 +1,6 @@
 
 <div style="text-align: center;">
-  <img src="conterminator.png">
+  <img src="conterminator.png?v=2">
 </div>
 
 
